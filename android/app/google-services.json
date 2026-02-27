@@ -1,0 +1,67 @@
+{
+  "project_info": {
+    "project_number": "511988401285",
+    "project_id": "library01-13936",
+    "storage_bucket": "library01-13936.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:511988401285:android:5c1cc0d6ff520519d395ec",
+        "android_client_info": {
+          "package_name": "com.example.glamora_mobile_app"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBUtIAEf3saJAlhcc-jUyq-EsHxHuuLpO8"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    },
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:511988401285:android:a2d47df15c9c1c37d395ec",
+        "android_client_info": {
+          "package_name": "com.example.my_app11"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBUtIAEf3saJAlhcc-jUyq-EsHxHuuLpO8"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    },
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:511988401285:android:2e049c6016a60f69d395ec",
+        "android_client_info": {
+          "package_name": "com.example.test_glamora"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBUtIAEf3saJAlhcc-jUyq-EsHxHuuLpO8"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
