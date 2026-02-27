@@ -10,6 +10,8 @@ class RegisterPage extends StatefulWidget {
 }
 
 class _RegisterPageState extends State<RegisterPage> {
+  final _nameController = TextEditingController();
+  final _phoneController = TextEditingController();
   final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
 
@@ -22,6 +24,8 @@ class _RegisterPageState extends State<RegisterPage> {
 
   @override
   void dispose() {
+    _nameController.dispose();
+    _phoneController.dispose();
     _emailController.dispose();
     _passwordController.dispose();
     super.dispose();
@@ -37,13 +41,16 @@ class _RegisterPageState extends State<RegisterPage> {
   }
 
   Future<void> _register() async {
+    final name = _nameController.text.trim();
+    final phone = _phoneController.text.trim();
     final email = _emailController.text.trim();
     final pass = _passwordController.text.trim();
 
-    if (email.isEmpty || pass.isEmpty) {
-      _snack("Please enter email and password");
+    if (name.isEmpty || phone.isEmpty || email.isEmpty || pass.isEmpty) {
+      _snack("Please fill all fields");
       return;
     }
+
     if (pass.length < 6) {
       _snack("Password must be at least 6 characters");
       return;
@@ -52,24 +59,27 @@ class _RegisterPageState extends State<RegisterPage> {
     setState(() => _loading = true);
 
     try {
-      final cred = await FirebaseAuth.instance.createUserWithEmailAndPassword(
-        email: email,
-        password: pass,
-      );
+      final cred = await FirebaseAuth.instance
+          .createUserWithEmailAndPassword(email: email, password: pass);
 
-      // Save user role to Firestore (default user)
-      await FirebaseFirestore.instance.collection("users").doc(cred.user!.uid).set({
+      // ✅ Save user details to Firestore
+      await FirebaseFirestore.instance
+          .collection("users")
+          .doc(cred.user!.uid)
+          .set({
+        "name": name,
+        "phone": phone,
         "email": email,
         "role": "user",
         "createdAt": FieldValue.serverTimestamp(),
       });
 
       _snack("Registered successfully. Please login.");
-      if (mounted) Navigator.pop(context); // back to Login
+      if (mounted) Navigator.pop(context);
     } on FirebaseAuthException catch (e) {
       _snack(e.message ?? "Register failed");
     } catch (e) {
-      _snack("Register failed: $e");
+      _snack("Error: $e");
     } finally {
       if (mounted) setState(() => _loading = false);
     }
@@ -93,80 +103,51 @@ class _RegisterPageState extends State<RegisterPage> {
           child: SingleChildScrollView(
             padding: const EdgeInsets.all(20),
             child: Container(
-              constraints: const BoxConstraints(maxWidth: 420),
-              padding: const EdgeInsets.all(18),
+              padding: const EdgeInsets.all(20),
               decoration: BoxDecoration(
                 color: _card,
                 borderRadius: BorderRadius.circular(22),
                 border: Border.all(color: _gold.withOpacity(0.35)),
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.black.withOpacity(0.5),
-                    blurRadius: 18,
-                    offset: const Offset(0, 10),
-                  )
-                ],
               ),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  Center(
-                    child: Column(
-                      children: [
-                        Container(
-                          height: 74,
-                          width: 74,
-                          decoration: BoxDecoration(
-                            shape: BoxShape.circle,
-                            color: _gold.withOpacity(0.14),
-                            border: Border.all(color: _gold.withOpacity(0.55)),
-                          ),
-                          child: const Icon(Icons.person_add_alt_1, color: _gold, size: 34),
-                        ),
-                        const SizedBox(height: 12),
-                        const Text(
-                          "Join Glamora",
-                          style: TextStyle(
-                            color: Colors.white,
-                            fontSize: 22,
-                            fontWeight: FontWeight.w800,
-                          ),
-                        ),
-                        const SizedBox(height: 6),
-                        Text(
-                          "Create an account to continue",
-                          style: TextStyle(
-                            color: Colors.white.withOpacity(0.7),
-                            fontSize: 13,
-                          ),
-                        ),
-                      ],
+                  const Text(
+                    "Join Glamora Salon",
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontSize: 22,
+                      fontWeight: FontWeight.w800,
                     ),
                   ),
-                  const SizedBox(height: 22),
+                  const SizedBox(height: 20),
 
-                  _GoldTextField(
-                    controller: _emailController,
-                    hint: "Email",
-                    icon: Icons.email_outlined,
-                    keyboardType: TextInputType.emailAddress,
-                  ),
+                  _goldField(_nameController, "Full Name", Icons.person),
                   const SizedBox(height: 12),
-                  _GoldTextField(
-                    controller: _passwordController,
-                    hint: "Password (min 6 chars)",
-                    icon: Icons.lock_outline,
-                    obscureText: _obscure,
+                  _goldField(_phoneController, "Mobile Number", Icons.phone,
+                      keyboard: TextInputType.phone),
+                  const SizedBox(height: 12),
+                  _goldField(_emailController, "Email", Icons.email,
+                      keyboard: TextInputType.emailAddress),
+                  const SizedBox(height: 12),
+                  _goldField(
+                    _passwordController,
+                    "Password",
+                    Icons.lock,
+                    obscure: _obscure,
                     suffix: IconButton(
-                      onPressed: () => setState(() => _obscure = !_obscure),
                       icon: Icon(
                         _obscure ? Icons.visibility_off : Icons.visibility,
-                        color: _gold.withOpacity(0.9),
+                        color: _gold,
                       ),
+                      onPressed: () =>
+                          setState(() => _obscure = !_obscure),
                     ),
                   ),
 
-                  const SizedBox(height: 18),
+                  const SizedBox(height: 20),
+
                   SizedBox(
                     height: 50,
                     child: ElevatedButton(
@@ -177,29 +158,16 @@ class _RegisterPageState extends State<RegisterPage> {
                         shape: RoundedRectangleBorder(
                           borderRadius: BorderRadius.circular(16),
                         ),
-                        elevation: 0,
                       ),
                       child: _loading
-                          ? const SizedBox(
-                              height: 22,
-                              width: 22,
-                              child: CircularProgressIndicator(strokeWidth: 2),
-                            )
+                          ? const CircularProgressIndicator()
                           : const Text(
                               "Register",
                               style: TextStyle(
-                                fontSize: 16,
-                                fontWeight: FontWeight.w800,
-                              ),
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: 16),
                             ),
                     ),
-                  ),
-
-                  const SizedBox(height: 12),
-                  Text(
-                    "By registering, you agree to our salon policies.",
-                    textAlign: TextAlign.center,
-                    style: TextStyle(color: Colors.white.withOpacity(0.55), fontSize: 12),
                   ),
                 ],
               ),
@@ -209,45 +177,30 @@ class _RegisterPageState extends State<RegisterPage> {
       ),
     );
   }
-}
 
-class _GoldTextField extends StatelessWidget {
-  const _GoldTextField({
-    required this.controller,
-    required this.hint,
-    required this.icon,
-    this.keyboardType,
-    this.obscureText = false,
-    this.suffix,
-  });
-
-  final TextEditingController controller;
-  final String hint;
-  final IconData icon;
-  final TextInputType? keyboardType;
-  final bool obscureText;
-  final Widget? suffix;
-
-  static const _gold = Color(0xFFD4AF37);
-
-  @override
-  Widget build(BuildContext context) {
+  Widget _goldField(
+    TextEditingController controller,
+    String hint,
+    IconData icon, {
+    bool obscure = false,
+    Widget? suffix,
+    TextInputType keyboard = TextInputType.text,
+  }) {
     return TextField(
       controller: controller,
-      keyboardType: keyboardType,
-      obscureText: obscureText,
+      obscureText: obscure,
+      keyboardType: keyboard,
       style: const TextStyle(color: Colors.white),
-      cursorColor: _gold,
       decoration: InputDecoration(
+        hintText: hint,
+        hintStyle: TextStyle(color: Colors.white.withOpacity(0.6)),
+        prefixIcon: Icon(icon, color: _gold),
+        suffixIcon: suffix,
         filled: true,
         fillColor: const Color(0xFF0F0F0F),
-        prefixIcon: Icon(icon, color: _gold.withOpacity(0.9)),
-        suffixIcon: suffix,
-        hintText: hint,
-        hintStyle: TextStyle(color: Colors.white.withOpacity(0.55)),
         enabledBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(16),
-          borderSide: BorderSide(color: _gold.withOpacity(0.35)),
+          borderSide: BorderSide(color: _gold.withOpacity(0.4)),
         ),
         focusedBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(16),
