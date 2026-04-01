@@ -1,32 +1,30 @@
 import 'package:flutter/material.dart';
-import 'package:firebase_auth/firebase_auth.dart';
 import 'package:intl/intl.dart';
 
-import 'models/appointment_model.dart';
-import 'services/appointment_repo.dart';
+import '../models/appointment_model.dart';
+import '../services/appointment_repo.dart';
 
-class BeauticianHome extends StatefulWidget {
-  const BeauticianHome({super.key});
+class AdminAppointmentsPage extends StatefulWidget {
+  const AdminAppointmentsPage({super.key});
 
   @override
-  State<BeauticianHome> createState() => _BeauticianHomeState();
+  State<AdminAppointmentsPage> createState() => _AdminAppointmentsPageState();
 }
 
-class _BeauticianHomeState extends State<BeauticianHome> {
+class _AdminAppointmentsPageState extends State<AdminAppointmentsPage> {
   final repo = AppointmentRepo();
 
   static const _bg = Color(0xFF0B0B0B);
   static const _card = Color(0xFF141414);
   static const _gold = Color(0xFFD4AF37);
 
-  void _logout() async {
-    await FirebaseAuth.instance.signOut();
-  }
-
   void _toast(String msg) {
     if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(msg), backgroundColor: _card),
+      SnackBar(
+        content: Text(msg),
+        backgroundColor: _card,
+      ),
     );
   }
 
@@ -43,13 +41,52 @@ class _BeauticianHomeState extends State<BeauticianHome> {
     }
   }
 
-  Future<void> _markCompleted(String id) async {
+  Future<void> _updateStatus(String id, String status) async {
     try {
-      await repo.updateStatus(id, 'completed');
-      _toast("Marked as completed ✅");
+      await repo.updateStatus(id, status);
+      _toast("Appointment updated ✅");
     } catch (e) {
-      _toast("Error: $e");
+      _toast("Update failed: $e");
     }
+  }
+
+  Widget _buildActionButtons(AppointmentModel a) {
+    if (a.status == 'pending') {
+      return Wrap(
+        spacing: 8,
+        children: [
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.green,
+              foregroundColor: Colors.white,
+            ),
+            onPressed: () => _updateStatus(a.id, 'approved'),
+            child: const Text("Approve"),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.redAccent,
+              foregroundColor: Colors.white,
+            ),
+            onPressed: () => _updateStatus(a.id, 'cancelled'),
+            child: const Text("Cancel"),
+          ),
+        ],
+      );
+    }
+
+    if (a.status == 'approved') {
+      return ElevatedButton(
+        style: ElevatedButton.styleFrom(
+          backgroundColor: _gold,
+          foregroundColor: Colors.black,
+        ),
+        onPressed: () => _updateStatus(a.id, 'completed'),
+        child: const Text("Mark Completed"),
+      );
+    }
+
+    return const SizedBox.shrink();
   }
 
   @override
@@ -58,33 +95,35 @@ class _BeauticianHomeState extends State<BeauticianHome> {
       backgroundColor: _bg,
       appBar: AppBar(
         backgroundColor: _bg,
+        elevation: 0,
         title: const Text(
-          "Beautician Dashboard",
+          "Appointments",
           style: TextStyle(color: Colors.white),
         ),
         iconTheme: const IconThemeData(color: Colors.white),
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.logout),
-            onPressed: _logout,
-          )
-        ],
       ),
       body: StreamBuilder<List<AppointmentModel>>(
         stream: repo.getAllAppointments(),
         builder: (context, snapshot) {
-          if (!snapshot.hasData) {
+          if (snapshot.connectionState == ConnectionState.waiting) {
             return const Center(child: CircularProgressIndicator());
           }
 
-          final appointments = snapshot.data!
-              .where((a) => a.status == 'approved') // only approved jobs
-              .toList();
+          if (snapshot.hasError) {
+            return Center(
+              child: Text(
+                "Error: ${snapshot.error}",
+                style: const TextStyle(color: Colors.white70),
+              ),
+            );
+          }
+
+          final appointments = snapshot.data ?? [];
 
           if (appointments.isEmpty) {
             return const Center(
               child: Text(
-                "No assigned appointments",
+                "No appointments found",
                 style: TextStyle(color: Colors.white70),
               ),
             );
@@ -130,12 +169,14 @@ class _BeauticianHomeState extends State<BeauticianHome> {
                         style: const TextStyle(color: Colors.white70),
                       ),
                       Text(
+                        "Price: ${a.price} LKR",
+                        style: const TextStyle(color: Colors.white70),
+                      ),
+                      Text(
                         "Duration: ${a.duration} mins",
                         style: const TextStyle(color: Colors.white70),
                       ),
                       const SizedBox(height: 10),
-
-                      // status
                       Container(
                         padding: const EdgeInsets.symmetric(
                           horizontal: 10,
@@ -154,17 +195,8 @@ class _BeauticianHomeState extends State<BeauticianHome> {
                           ),
                         ),
                       ),
-
                       const SizedBox(height: 12),
-
-                      ElevatedButton(
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: _gold,
-                          foregroundColor: Colors.black,
-                        ),
-                        onPressed: () => _markCompleted(a.id),
-                        child: const Text("Mark Completed"),
-                      ),
+                      _buildActionButtons(a),
                     ],
                   ),
                 ),

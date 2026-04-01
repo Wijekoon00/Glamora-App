@@ -1,6 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+
+import 'pages/admin_services_page.dart';
 import 'manage_users_page.dart';
+import 'pages/admin_appointments_page.dart';
 
 class AdminHome extends StatelessWidget {
   const AdminHome({super.key});
@@ -9,8 +12,18 @@ class AdminHome extends StatelessWidget {
   static const Color _card = Color(0xFF141414);
   static const Color _gold = Color(0xFFD4AF37);
 
+  void _go(BuildContext context, Widget page) {
+    Navigator.push(context, MaterialPageRoute(builder: (_) => page));
+  }
+
+  Future<void> _logout(BuildContext context) async {
+    await FirebaseAuth.instance.signOut();
+  }
+
   @override
   Widget build(BuildContext context) {
+    final userEmail = FirebaseAuth.instance.currentUser?.email ?? "Admin";
+
     return Scaffold(
       backgroundColor: _bg,
       appBar: AppBar(
@@ -18,72 +31,151 @@ class AdminHome extends StatelessWidget {
         elevation: 0,
         title: const Text(
           "Admin Dashboard",
-          style: TextStyle(color: Colors.white, fontWeight: FontWeight.w700),
+          style: TextStyle(
+            color: _gold,
+            fontWeight: FontWeight.w700,
+            letterSpacing: 0.4,
+          ),
         ),
+        iconTheme: const IconThemeData(color: _gold),
         actions: [
           IconButton(
+            tooltip: "Logout",
+            onPressed: () => _logout(context),
             icon: const Icon(Icons.logout, color: _gold),
-            onPressed: () async => FirebaseAuth.instance.signOut(),
           ),
         ],
       ),
-      body: SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.all(16),
-          child: Column(
-            children: [
-              _GoldCardButton(
-                title: "Manage Users & Roles",
-                subtitle: "Set customer / beautician / admin",
-                icon: Icons.manage_accounts,
-                onTap: () {
-                  Navigator.push(
-                    context,
-                    MaterialPageRoute(builder: (_) => const ManageUsersPage()),
-                  );
-                },
+      body: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          children: [
+            _HeaderCard(email: userEmail),
+            const SizedBox(height: 16),
+            Expanded(
+              child: GridView.count(
+                crossAxisCount: 2,
+                crossAxisSpacing: 12,
+                mainAxisSpacing: 12,
+                childAspectRatio: 1.15,
+                children: [
+                  _DashboardTile(
+                    title: "Manage Services",
+                    subtitle: "Add • Edit • Delete",
+                    icon: Icons.content_cut,
+                    onTap: () => _go(context, const AdminServicesPage()),
+                  ),
+                  _DashboardTile(
+                    title: "Manage Users",
+                    subtitle: "Change roles",
+                    icon: Icons.people_alt,
+                    onTap: () => _go(context, const ManageUsersPage()),
+                  ),
+                  _DashboardTile(
+                    title: "Appointments",
+                    subtitle: "Approve • Complete",
+                    icon: Icons.calendar_month,
+                    onTap: () => _go(context, const AdminAppointmentsPage()),
+                  ),
+                  _DashboardTile(
+                    title: "Reports",
+                    subtitle: "Coming soon",
+                    icon: Icons.bar_chart,
+                    onTap: () {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(
+                          content: Text("Reports page coming soon 🙂"),
+                        ),
+                      );
+                    },
+                  ),
+                ],
               ),
-              const SizedBox(height: 12),
-
-              // You can add more admin cards later:
-              _GoldCardButton(
-                title: "Services",
-                subtitle: "Add / edit / delete services",
-                icon: Icons.design_services,
-                onTap: () {
-                  // Later: open your services CRUD page
-                },
-              ),
-              const SizedBox(height: 12),
-
-              _GoldCardButton(
-                title: "Appointments",
-                subtitle: "View & manage bookings",
-                icon: Icons.calendar_month,
-                onTap: () {
-                  // Later: open appointments page
-                },
-              ),
-            ],
-          ),
+            ),
+          ],
         ),
       ),
     );
   }
 }
 
-class _GoldCardButton extends StatelessWidget {
-  const _GoldCardButton({
+class _HeaderCard extends StatelessWidget {
+  final String email;
+  const _HeaderCard({required this.email});
+
+  static const Color _card = Color(0xFF141414);
+  static const Color _gold = Color(0xFFD4AF37);
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: _card,
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: _gold.withOpacity(0.35)),
+        boxShadow: [
+          BoxShadow(
+            color: _gold.withOpacity(0.10),
+            blurRadius: 16,
+            offset: const Offset(0, 8),
+          )
+        ],
+      ),
+      child: Row(
+        children: [
+          Container(
+            height: 46,
+            width: 46,
+            decoration: BoxDecoration(
+              color: _gold.withOpacity(0.12),
+              borderRadius: BorderRadius.circular(14),
+              border: Border.all(color: _gold.withOpacity(0.35)),
+            ),
+            child: const Icon(Icons.verified_user, color: _gold),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  "Welcome back",
+                  style: TextStyle(color: Colors.white70, fontSize: 13),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  email,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 16,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _DashboardTile extends StatelessWidget {
+  final String title;
+  final String subtitle;
+  final IconData icon;
+  final VoidCallback onTap;
+
+  const _DashboardTile({
     required this.title,
     required this.subtitle,
     required this.icon,
     required this.onTap,
   });
-
-  final String title;
-  final String subtitle;
-  final IconData icon;
-  final VoidCallback onTap;
 
   static const Color _card = Color(0xFF141414);
   static const Color _gold = Color(0xFFD4AF37);
@@ -91,60 +183,52 @@ class _GoldCardButton extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return InkWell(
-      borderRadius: BorderRadius.circular(20),
+      borderRadius: BorderRadius.circular(18),
       onTap: onTap,
-      child: Container(
-        padding: const EdgeInsets.all(16),
+      child: Ink(
         decoration: BoxDecoration(
           color: _card,
-          borderRadius: BorderRadius.circular(20),
-          border: Border.all(color: _gold.withOpacity(0.35)),
+          borderRadius: BorderRadius.circular(18),
+          border: Border.all(color: _gold.withOpacity(0.22)),
           boxShadow: [
             BoxShadow(
-              color: Colors.black.withOpacity(0.45),
-              blurRadius: 16,
-              offset: const Offset(0, 10),
+              color: Colors.black.withOpacity(0.35),
+              blurRadius: 10,
+              offset: const Offset(0, 6),
             )
           ],
         ),
-        child: Row(
-          children: [
-            Container(
-              height: 54,
-              width: 54,
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                color: _gold.withOpacity(0.14),
-                border: Border.all(color: _gold.withOpacity(0.55)),
+        child: Padding(
+          padding: const EdgeInsets.all(14),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Container(
+                height: 44,
+                width: 44,
+                decoration: BoxDecoration(
+                  color: _gold.withOpacity(0.12),
+                  borderRadius: BorderRadius.circular(14),
+                  border: Border.all(color: _gold.withOpacity(0.35)),
+                ),
+                child: Icon(icon, color: _gold),
               ),
-              child: Icon(icon, color: _gold),
-            ),
-            const SizedBox(width: 14),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    title,
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontWeight: FontWeight.w800,
-                      fontSize: 16,
-                    ),
-                  ),
-                  const SizedBox(height: 5),
-                  Text(
-                    subtitle,
-                    style: TextStyle(
-                      color: Colors.white.withOpacity(0.7),
-                      fontSize: 12,
-                    ),
-                  ),
-                ],
+              const Spacer(),
+              Text(
+                title,
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontWeight: FontWeight.w800,
+                  fontSize: 15,
+                ),
               ),
-            ),
-            Icon(Icons.chevron_right, color: _gold.withOpacity(0.9)),
-          ],
+              const SizedBox(height: 6),
+              Text(
+                subtitle,
+                style: const TextStyle(color: Colors.white60, fontSize: 12),
+              ),
+            ],
+          ),
         ),
       ),
     );
