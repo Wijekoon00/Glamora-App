@@ -88,7 +88,7 @@ class ServiceRepo {
       'updatedAt': FieldValue.serverTimestamp(),
     });
   }
-
+  
   Future<void> deleteService(String id) async {
     await _col.doc(id).delete();
   }

@@ -1,9 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-import 'package:test_glamora/beautician_home.dart';
-import 'admin_home.dart';
-import 'user_home.dart';
+
+import 'admin_nav_page.dart';
+import 'beautician_nav_page.dart';
+import 'customer_nav_page.dart';
 
 class HomeRouter extends StatelessWidget {
   const HomeRouter({super.key});
@@ -12,26 +13,39 @@ class HomeRouter extends StatelessWidget {
   Widget build(BuildContext context) {
     final user = FirebaseAuth.instance.currentUser;
 
+    if (user == null) {
+      return const Scaffold(
+        body: Center(child: Text("User not found")),
+      );
+    }
+
     return FutureBuilder<DocumentSnapshot>(
       future: FirebaseFirestore.instance
           .collection('users')
-          .doc(user!.uid)
+          .doc(user.uid)
           .get(),
       builder: (context, snapshot) {
-        if (!snapshot.hasData) {
+        if (snapshot.connectionState == ConnectionState.waiting) {
           return const Scaffold(
             body: Center(child: CircularProgressIndicator()),
           );
         }
 
-       final data = snapshot.data!.data() as Map<String, dynamic>?;
-final role = data?['role'] ?? 'user';
+        if (snapshot.hasError) {
+          return Scaffold(
+            body: Center(
+              child: Text("Error: ${snapshot.error}"),
+            ),
+          );
+        }
 
-if (role == 'admin') return const AdminHome();
-if (role == 'beautician') return const BeauticianHome();
-return const UserHome(); // customer
+        final data = snapshot.data?.data() as Map<String, dynamic>?;
+        final role = data?['role'] ?? 'user';
+
+        if (role == 'admin') return const AdminNavPage();
+        if (role == 'beautician') return const BeauticianNavPage();
+        return const CustomerNavPage();
       },
     );
   }
 }
-
