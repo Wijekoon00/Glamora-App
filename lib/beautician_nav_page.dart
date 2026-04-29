@@ -4,6 +4,8 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'beautician_jobs_page.dart';
 import 'beautician_completed_page.dart';
 import 'beautician_profile_page.dart';
+import 'widgets/luxury_nav_bar.dart';
+import 'widgets/luxury_form_widgets.dart';
 
 class BeauticianNavPage extends StatefulWidget {
   const BeauticianNavPage({super.key});
@@ -15,71 +17,55 @@ class BeauticianNavPage extends StatefulWidget {
 class _BeauticianNavPageState extends State<BeauticianNavPage> {
   int _selectedIndex = 0;
 
-  static const _bg = Color(0xFF0B0B0B);
-  static const _gold = Color(0xFFD4AF37);
-
-  final List<Widget> _pages = const [
+  static const _pages = [
     BeauticianJobsPage(),
     BeauticianCompletedPage(),
     BeauticianProfilePage(),
   ];
 
-  final List<String> _titles = const [
-    "Beautician Jobs",
-    "Completed Jobs",
-    "Profile",
+  static const _titles = [
+    'My Jobs',
+    'Completed',
+    'Profile',
   ];
 
-  Future<void> _logout() async {
-    await FirebaseAuth.instance.signOut();
-  }
+  static const _navItems = [
+    LuxuryNavItem(
+      icon: Icons.work_outline_rounded,
+      activeIcon: Icons.work_rounded,
+      label: 'Jobs',
+    ),
+    LuxuryNavItem(
+      icon: Icons.check_circle_outline_rounded,
+      activeIcon: Icons.check_circle_rounded,
+      label: 'Completed',
+    ),
+    LuxuryNavItem(
+      icon: Icons.person_outline_rounded,
+      activeIcon: Icons.person_rounded,
+      label: 'Profile',
+    ),
+  ];
 
-  void _onTap(int index) {
-    setState(() {
-      _selectedIndex = index;
-    });
-  }
+  Future<void> _logout() async =>
+      FirebaseAuth.instance.signOut();
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: _bg,
-      appBar: AppBar(
-        backgroundColor: _bg,
-        elevation: 0,
-        title: Text(
-          _titles[_selectedIndex],
-          style: const TextStyle(color: Colors.white),
-        ),
-        iconTheme: const IconThemeData(color: Colors.white),
-        actions: [
-          IconButton(
-            onPressed: _logout,
-            icon: const Icon(Icons.logout),
-          ),
-        ],
+      backgroundColor: LuxuryTheme.black,
+      appBar: luxuryAppBar(
+        title: _titles[_selectedIndex],
+        onLogout: _logout,
       ),
-      body: _pages[_selectedIndex],
-      bottomNavigationBar: BottomNavigationBar(
+      body: IndexedStack(
+        index: _selectedIndex,
+        children: _pages,
+      ),
+      bottomNavigationBar: LuxuryNavBar(
+        items: _navItems,
         currentIndex: _selectedIndex,
-        onTap: _onTap,
-        backgroundColor: const Color(0xFF141414),
-        selectedItemColor: _gold,
-        unselectedItemColor: Colors.white70,
-        items: const [
-          BottomNavigationBarItem(
-            icon: Icon(Icons.work),
-            label: "Jobs",
-          ),
-          BottomNavigationBarItem(
-            icon: Icon(Icons.check_circle),
-            label: "Completed",
-          ),
-          BottomNavigationBarItem(
-            icon: Icon(Icons.person),
-            label: "Profile",
-          ),
-        ],
+        onTap: (i) => setState(() => _selectedIndex = i),
       ),
     );
   }

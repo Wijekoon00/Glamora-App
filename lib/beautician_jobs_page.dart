@@ -3,6 +3,7 @@ import 'package:intl/intl.dart';
 
 import 'models/appointment_model.dart';
 import 'services/appointment_repo.dart';
+import 'widgets/luxury_form_widgets.dart';
 
 class BeauticianJobsPage extends StatefulWidget {
   const BeauticianJobsPage({super.key});
@@ -14,16 +15,15 @@ class BeauticianJobsPage extends StatefulWidget {
 class _BeauticianJobsPageState extends State<BeauticianJobsPage> {
   final repo = AppointmentRepo();
 
-  static const _bg = Color(0xFF0B0B0B);
-  static const _card = Color(0xFF141414);
-  static const _gold = Color(0xFFD4AF37);
-
   bool _loading = false;
 
   void _toast(String msg) {
     if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(msg), backgroundColor: _card),
+      SnackBar(
+        content: Text(msg, style: const TextStyle(color: Colors.white)),
+        backgroundColor: LuxuryTheme.card,
+      ),
     );
   }
 
@@ -69,26 +69,18 @@ class _BeauticianJobsPageState extends State<BeauticianJobsPage> {
       return Row(
         children: [
           Expanded(
-            child: ElevatedButton(
-              style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.green,
-                foregroundColor: Colors.white,
-              ),
-              onPressed:
-                  _loading ? null : () => _updateStatus(a.id, 'approved'),
-              child: const Text("Approve"),
+            child: _GradientButton(
+              label: "Approve",
+              colors: [Colors.green.shade700, Colors.green],
+              onPressed: _loading ? null : () => _updateStatus(a.id, 'approved'),
             ),
           ),
-          const SizedBox(width: 8),
+          const SizedBox(width: 10),
           Expanded(
-            child: ElevatedButton(
-              style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.redAccent,
-                foregroundColor: Colors.white,
-              ),
-              onPressed:
-                  _loading ? null : () => _updateStatus(a.id, 'cancelled'),
-              child: const Text("Cancel"),
+            child: _GradientButton(
+              label: "Cancel",
+              colors: [Colors.red.shade800, Colors.redAccent],
+              onPressed: _loading ? null : () => _updateStatus(a.id, 'cancelled'),
             ),
           ),
         ],
@@ -96,32 +88,50 @@ class _BeauticianJobsPageState extends State<BeauticianJobsPage> {
     }
 
     if (a.status == 'approved') {
-      return SizedBox(
-        width: double.infinity,
-        child: ElevatedButton(
-          style: ElevatedButton.styleFrom(
-            backgroundColor: _gold,
-            foregroundColor: Colors.black,
-          ),
-          onPressed:
-              _loading ? null : () => _updateStatus(a.id, 'completed'),
-          child: const Text("Mark Completed"),
-        ),
+      return _GradientButton(
+        label: "Mark Completed",
+        colors: [LuxuryTheme.purple, LuxuryTheme.purpleLight],
+        fullWidth: true,
+        glowColor: LuxuryTheme.purple,
+        onPressed: _loading ? null : () => _updateStatus(a.id, 'completed'),
       );
     }
 
     return const SizedBox.shrink();
   }
 
+  Widget _buildDetailItem(IconData icon, String text) {
+    return Row(
+      children: [
+        Icon(icon, size: 14, color: LuxuryTheme.purpleLight),
+        const SizedBox(width: 6),
+        Expanded(
+          child: Text(
+            text,
+            style: const TextStyle(
+              color: Colors.white,
+              fontSize: 13,
+            ),
+            overflow: TextOverflow.ellipsis,
+          ),
+        ),
+      ],
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Container(
-      color: _bg,
+      color: LuxuryTheme.black,
       child: StreamBuilder<List<AppointmentModel>>(
         stream: repo.getAllAppointments(),
         builder: (context, snapshot) {
           if (snapshot.connectionState == ConnectionState.waiting) {
-            return const Center(child: CircularProgressIndicator());
+            return const Center(
+              child: CircularProgressIndicator(
+                color: LuxuryTheme.purpleLight,
+              ),
+            );
           }
 
           if (snapshot.hasError) {
@@ -139,81 +149,154 @@ class _BeauticianJobsPageState extends State<BeauticianJobsPage> {
               .toList();
 
           if (appointments.isEmpty) {
-            return const Center(
-              child: Text(
-                "No active appointments",
-                style: TextStyle(color: Colors.white70),
+            return Center(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Container(
+                    width: 80,
+                    height: 80,
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      color: LuxuryTheme.purple.withAlpha(40),
+                      border: Border.all(
+                        color: LuxuryTheme.purple.withAlpha(80),
+                        width: 1.5,
+                      ),
+                    ),
+                    child: const Icon(
+                      Icons.work_outline_rounded,
+                      color: LuxuryTheme.purpleLight,
+                      size: 36,
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  const Text(
+                    "No active appointments",
+                    style: TextStyle(
+                      color: Colors.white70,
+                      fontSize: 15,
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
+                ],
               ),
             );
           }
 
           return ListView.separated(
-            padding: const EdgeInsets.all(12),
+            padding: const EdgeInsets.all(16),
             itemCount: appointments.length,
-            separatorBuilder: (_, __) => const SizedBox(height: 10),
+            separatorBuilder: (_, __) => const SizedBox(height: 12),
             itemBuilder: (context, index) {
               final a = appointments[index];
+              final statusColor = _statusColor(a.status);
 
               return Container(
                 decoration: BoxDecoration(
-                  color: _card,
-                  borderRadius: BorderRadius.circular(14),
-                  border: Border.all(color: _gold.withOpacity(0.25)),
+                  color: LuxuryTheme.card,
+                  borderRadius: BorderRadius.circular(20),
+                  border: Border.all(
+                    color: LuxuryTheme.purple.withAlpha(60),
+                    width: 1,
+                  ),
+                  boxShadow: [
+                    BoxShadow(
+                      color: LuxuryTheme.purple.withAlpha(30),
+                      blurRadius: 16,
+                      spreadRadius: 0,
+                      offset: const Offset(0, 4),
+                    ),
+                  ],
                 ),
                 child: Padding(
-                  padding: const EdgeInsets.all(14),
+                  padding: const EdgeInsets.all(16),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
+                      // ── Card header ──────────────────────────────────────
                       Text(
                         a.serviceName,
                         style: const TextStyle(
                           color: Colors.white,
                           fontSize: 16,
-                          fontWeight: FontWeight.w700,
+                          fontWeight: FontWeight.bold,
                         ),
                       ),
-                      const SizedBox(height: 8),
+                      const SizedBox(height: 4),
                       Text(
-                        "Customer: ${a.userName}",
-                        style: const TextStyle(color: Colors.white70),
+                        a.userName,
+                        style: TextStyle(
+                          color: LuxuryTheme.purpleLight.withAlpha(200),
+                          fontSize: 13,
+                          fontWeight: FontWeight.w500,
+                        ),
                       ),
-                      Text(
-                        "Date: ${DateFormat('yyyy-MM-dd').format(a.date)}",
-                        style: const TextStyle(color: Colors.white70),
+                      const SizedBox(height: 14),
+
+                      // ── Detail grid (2 columns) ──────────────────────────
+                      Row(
+                        children: [
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                _buildDetailItem(
+                                  Icons.calendar_today_rounded,
+                                  DateFormat('yyyy-MM-dd').format(a.date),
+                                ),
+                                const SizedBox(height: 8),
+                                _buildDetailItem(
+                                  Icons.access_time_rounded,
+                                  a.timeSlot,
+                                ),
+                              ],
+                            ),
+                          ),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                _buildDetailItem(
+                                  Icons.payments_outlined,
+                                  "${a.price} LKR",
+                                ),
+                                const SizedBox(height: 8),
+                                _buildDetailItem(
+                                  Icons.timer_outlined,
+                                  "${a.duration} mins",
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
                       ),
-                      Text(
-                        "Time: ${a.timeSlot}",
-                        style: const TextStyle(color: Colors.white70),
-                      ),
-                      Text(
-                        "Price: ${a.price} LKR",
-                        style: const TextStyle(color: Colors.white70),
-                      ),
-                      Text(
-                        "Duration: ${a.duration} mins",
-                        style: const TextStyle(color: Colors.white70),
-                      ),
-                      const SizedBox(height: 10),
+                      const SizedBox(height: 14),
+
+                      // ── Status badge ─────────────────────────────────────
                       Container(
                         padding: const EdgeInsets.symmetric(
-                          horizontal: 10,
+                          horizontal: 12,
                           vertical: 5,
                         ),
                         decoration: BoxDecoration(
-                          color: _statusColor(a.status).withOpacity(0.15),
+                          color: statusColor.withAlpha(38),
                           borderRadius: BorderRadius.circular(20),
-                          border: Border.all(color: _statusColor(a.status)),
+                          border: Border.all(color: statusColor, width: 1),
                         ),
                         child: Text(
                           a.status.toUpperCase(),
                           style: TextStyle(
-                            color: _statusColor(a.status),
+                            color: statusColor,
                             fontWeight: FontWeight.w700,
+                            fontSize: 11,
+                            letterSpacing: 0.8,
                           ),
                         ),
                       ),
-                      const SizedBox(height: 12),
+                      const SizedBox(height: 14),
+
+                      // ── Action buttons ───────────────────────────────────
                       _buildActionButtons(a),
                     ],
                   ),
@@ -222,6 +305,66 @@ class _BeauticianJobsPageState extends State<BeauticianJobsPage> {
             },
           );
         },
+      ),
+    );
+  }
+}
+
+// ── Internal gradient button helper ──────────────────────────────────────────
+class _GradientButton extends StatelessWidget {
+  const _GradientButton({
+    required this.label,
+    required this.colors,
+    required this.onPressed,
+    this.fullWidth = false,
+    this.glowColor,
+  });
+
+  final String label;
+  final List<Color> colors;
+  final VoidCallback? onPressed;
+  final bool fullWidth;
+  final Color? glowColor;
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      width: fullWidth ? double.infinity : null,
+      height: 42,
+      child: GestureDetector(
+        onTap: onPressed,
+        child: Opacity(
+          opacity: onPressed == null ? 0.5 : 1.0,
+          child: Container(
+            alignment: Alignment.center,
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(12),
+              gradient: LinearGradient(
+                colors: colors,
+                begin: Alignment.centerLeft,
+                end: Alignment.centerRight,
+              ),
+              boxShadow: glowColor != null
+                  ? [
+                      BoxShadow(
+                        color: glowColor!.withAlpha(100),
+                        blurRadius: 14,
+                        offset: const Offset(0, 4),
+                      ),
+                    ]
+                  : null,
+            ),
+            child: Text(
+              label,
+              style: const TextStyle(
+                color: Colors.white,
+                fontWeight: FontWeight.w700,
+                fontSize: 13,
+                letterSpacing: 0.3,
+              ),
+            ),
+          ),
+        ),
       ),
     );
   }

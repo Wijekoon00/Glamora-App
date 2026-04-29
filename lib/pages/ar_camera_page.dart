@@ -1,14 +1,15 @@
+
 import 'dart:typed_data';
 import 'package:camera/camera.dart';
 import 'package:flutter/material.dart';
 import 'package:google_mlkit_face_detection/google_mlkit_face_detection.dart';
 import '../services/ar_face_painter.dart';
+import '../widgets/luxury_form_widgets.dart';
 
-/// Live AR camera page — detects face in real-time and overlays style previews.
 class ArCameraPage extends StatefulWidget {
   final String hairstyleName;
   final String beardName;
-  final Color hairColor;
+  final Color  hairColor;
   final String hairColorName;
 
   const ArCameraPage({
@@ -24,22 +25,22 @@ class ArCameraPage extends StatefulWidget {
 }
 
 class _ArCameraPageState extends State<ArCameraPage> {
-  static const _gold = Color(0xFFD4AF37);
 
-  CameraController? _cameraController;
-  List<CameraDescription> _cameras = [];
-  bool _isCameraReady = false;
-  bool _isProcessing = false;
+  CameraController? _ctrl;
+  bool  _cameraReady  = false;
+  bool  _processing   = false;
+  bool  _isFront      = true;
+  int   _sensorDeg    = 270; // will be updated from camera description
 
-  List<Face> _detectedFaces = [];
-  Size _imageSize = Size.zero;
+  List<Face> _faces     = [];
+  Size       _imageSize = Size.zero;
 
-  ArOverlayStyle _currentOverlay = ArOverlayStyle.hairstyle;
+  ArOverlayStyle _overlay = ArOverlayStyle.hairstyle;
 
-  late final FaceDetector _faceDetector = FaceDetector(
+  late final FaceDetector _detector = FaceDetector(
     options: FaceDetectorOptions(
       enableLandmarks: true,
-      enableContours: true,
+      enableContours:  true,
       performanceMode: FaceDetectorMode.fast,
     ),
   );
@@ -50,180 +51,245 @@ class _ArCameraPageState extends State<ArCameraPage> {
     _initCamera();
   }
 
+  // ── Camera init ─────────────────────────────────────────────────────────────
   Future<void> _initCamera() async {
-    _cameras = await availableCameras();
-    if (_cameras.isEmpty) return;
+    final cameras = await availableCameras();
+    if (cameras.isEmpty) return;
 
-    // Prefer front camera for selfie-style AR
-    final frontCamera = _cameras.firstWhere(
+    // Prefer front camera
+    final cam = cameras.firstWhere(
       (c) => c.lensDirection == CameraLensDirection.front,
-      orElse: () => _cameras.first,
+      orElse: () => cameras.first,
     );
 
-    _cameraController = CameraController(
-      frontCamera,
-      ResolutionPreset.medium,
+    _isFront    = cam.lensDirection == CameraLensDirection.front;
+    _sensorDeg  = cam.sensorOrientation;
+
+    _ctrl = CameraController(
+      cam,
+      ResolutionPreset.medium,   // 640×480 — good balance of speed & accuracy
       enableAudio: false,
       imageFormatGroup: ImageFormatGroup.nv21,
     );
 
-    await _cameraController!.initialize();
-
+    await _ctrl!.initialize();
     if (!mounted) return;
 
-    setState(() => _isCameraReady = true);
-
-    _cameraController!.startImageStream(_processCameraFrame);
+    setState(() => _cameraReady = true);
+    _ctrl!.startImageStream(_onFrame);
   }
 
-  Future<void> _processCameraFrame(CameraImage cameraImage) async {
-    if (_isProcessing) return;
-    _isProcessing = true;
+  // ── Frame processing ────────────────────────────────────────────────────────
+  Future<void> _onFrame(CameraImage img) async {
+    if (_processing) return;
+    _processing = true;
 
     try {
-      final camera = _cameraController!.description;
-      final rotation = _rotationFromSensor(camera.sensorOrientation);
+      // Build InputImage with correct rotation metadata
+      final rotation = _mlKitRotation(_sensorDeg);
 
       final inputImage = InputImage.fromBytes(
-        bytes: _concatenatePlanes(cameraImage.planes),
+        bytes: _mergeNV21(img),
         metadata: InputImageMetadata(
-          size: Size(
-            cameraImage.width.toDouble(),
-            cameraImage.height.toDouble(),
-          ),
-          rotation: rotation,
-          format: InputImageFormat.nv21,
-          bytesPerRow: cameraImage.planes[0].bytesPerRow,
+          size:         Size(img.width.toDouble(), img.height.toDouble()),
+          rotation:     rotation,
+          format:       InputImageFormat.nv21,
+          bytesPerRow:  img.planes[0].bytesPerRow,
         ),
       );
 
-      final faces = await _faceDetector.processImage(inputImage);
+      final faces = await _detector.processImage(inputImage);
 
       if (mounted) {
         setState(() {
-          _detectedFaces = faces;
-          _imageSize = Size(
-            cameraImage.width.toDouble(),
-            cameraImage.height.toDouble(),
-          );
+          _faces     = faces;
+          _imageSize = Size(img.width.toDouble(), img.height.toDouble());
         });
       }
     } catch (_) {
-      // Silently skip frames that fail
+      // Skip bad frames silently
     } finally {
-      _isProcessing = false;
+      _processing = false;
     }
   }
 
-  InputImageRotation _rotationFromSensor(int sensorOrientation) {
-    switch (sensorOrientation) {
-      case 90:
-        return InputImageRotation.rotation90deg;
-      case 180:
-        return InputImageRotation.rotation180deg;
-      case 270:
-        return InputImageRotation.rotation270deg;
-      default:
-        return InputImageRotation.rotation0deg;
-    }
+  // NV21 = Y plane + interleaved VU plane — concatenate all planes
+  Uint8List _mergeNV21(CameraImage img) {
+    final bytes = <int>[];
+    for (final p in img.planes) bytes.addAll(p.bytes);
+    return Uint8List.fromList(bytes);
   }
 
-  Uint8List _concatenatePlanes(List<Plane> planes) {
-    final List<int> allBytes = <int>[];
-    for (final Plane plane in planes) {
-      allBytes.addAll(plane.bytes);
+  InputImageRotation _mlKitRotation(int deg) {
+    switch (deg) {
+      case 90:  return InputImageRotation.rotation90deg;
+      case 180: return InputImageRotation.rotation180deg;
+      case 270: return InputImageRotation.rotation270deg;
+      default:  return InputImageRotation.rotation0deg;
     }
-    return Uint8List.fromList(allBytes);
   }
 
   String get _currentStyleName {
-    switch (_currentOverlay) {
-      case ArOverlayStyle.hairstyle:
-        return widget.hairstyleName;
-      case ArOverlayStyle.beard:
-        return widget.beardName;
-      case ArOverlayStyle.hairColor:
-        return widget.hairColorName;
+    switch (_overlay) {
+      case ArOverlayStyle.hairstyle: return widget.hairstyleName;
+      case ArOverlayStyle.beard:     return widget.beardName;
+      case ArOverlayStyle.hairColor: return widget.hairColorName;
     }
   }
 
   @override
   void dispose() {
-    _cameraController?.stopImageStream();
-    _cameraController?.dispose();
-    _faceDetector.close();
+    _ctrl?.stopImageStream();
+    _ctrl?.dispose();
+    _detector.close();
     super.dispose();
   }
 
+  // ── Build ───────────────────────────────────────────────────────────────────
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: Colors.black,
       appBar: AppBar(
-        backgroundColor: const Color(0xFF0B0B0B),
-        title: const Text(
-          "AR Style Preview",
-          style: TextStyle(color: _gold, fontWeight: FontWeight.bold),
+        backgroundColor: LuxuryTheme.card,
+        elevation: 0,
+        iconTheme: const IconThemeData(color: LuxuryTheme.purpleLight),
+        title: ShaderMask(
+          shaderCallback: (b) => const LinearGradient(
+            colors: [LuxuryTheme.goldLight, LuxuryTheme.purpleLight],
+          ).createShader(b),
+          child: const Text('AR Style Preview',
+              style: TextStyle(color: Colors.white,
+                  fontWeight: FontWeight.w800, fontSize: 17)),
         ),
-        iconTheme: const IconThemeData(color: _gold),
       ),
-      body: Column(
-        children: [
-          // Camera preview with AR overlay
-          Expanded(
-            child: _isCameraReady && _cameraController != null
-                ? Stack(
-                    fit: StackFit.expand,
-                    children: [
-                      CameraPreview(_cameraController!),
-                      if (_detectedFaces.isNotEmpty && _imageSize != Size.zero)
-                        CustomPaint(
-                          painter: ArFacePainter(
-                            faces: _detectedFaces,
-                            imageSize: _imageSize,
-                            overlayStyle: _currentOverlay,
-                            styleName: _currentStyleName,
-                            hairColor: widget.hairColor,
-                          ),
-                        ),
-                      if (_detectedFaces.isEmpty)
-                        const Center(
-                          child: Text(
-                            "Point camera at your face",
-                            style: TextStyle(
-                              color: Colors.white54,
-                              fontSize: 16,
-                            ),
-                          ),
-                        ),
-                    ],
-                  )
-                : const Center(
-                    child: CircularProgressIndicator(color: _gold),
-                  ),
-          ),
+      body: Column(children: [
+        // ── Camera + overlay ─────────────────────────────────────────────
+        Expanded(
+          child: _cameraReady && _ctrl != null
+              ? LayoutBuilder(builder: (ctx, constraints) {
+                  final canvasSize = Size(
+                      constraints.maxWidth, constraints.maxHeight);
+                  return Stack(fit: StackFit.expand, children: [
+                    CameraPreview(_ctrl!),
 
-          // Overlay selector tabs
+                    // AR overlay — only when face detected
+                    if (_faces.isNotEmpty && _imageSize != Size.zero)
+                      CustomPaint(
+                        size: canvasSize,
+                        painter: ArFacePainter(
+                          faces:         _faces,
+                          imageSize:     _imageSize,
+                          overlayStyle:  _overlay,
+                          styleName:     _currentStyleName,
+                          hairColor:     widget.hairColor,
+                          sensorDegrees: _sensorDeg,
+                          isFrontCamera: _isFront,
+                        ),
+                      ),
+
+                    // Scanning guide when no face
+                    if (_faces.isEmpty)
+                      _buildScanGuide(),
+
+                    // Face count badge
+                    if (_faces.isNotEmpty)
+                      Positioned(
+                        top: 12, right: 12,
+                        child: _badge(
+                            '${_faces.length} face detected',
+                            Colors.green),
+                      ),
+                  ]);
+                })
+              : Center(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Container(
+                        width: 56, height: 56,
+                        decoration: BoxDecoration(
+                          shape: BoxShape.circle,
+                          color: LuxuryTheme.card,
+                          border: Border.all(
+                              color: LuxuryTheme.purpleLight.withAlpha(120)),
+                        ),
+                        child: const Padding(
+                          padding: EdgeInsets.all(14),
+                          child: CircularProgressIndicator(
+                              color: LuxuryTheme.purpleLight, strokeWidth: 2),
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                      const Text('Starting camera...',
+                          style: TextStyle(color: Colors.white54)),
+                    ],
+                  ),
+                ),
+        ),
+
+        // ── Controls ─────────────────────────────────────────────────────
+        Container(
+          decoration: BoxDecoration(
+            color: LuxuryTheme.card,
+            border: Border(
+              top: BorderSide(
+                  color: LuxuryTheme.purpleLight.withAlpha(40), width: 1),
+            ),
+          ),
+          padding: const EdgeInsets.fromLTRB(16, 14, 16, 20),
+          child: Column(children: [
+            // Style name
+            Text(
+              _currentStyleName,
+              textAlign: TextAlign.center,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(
+                  color: Colors.white.withAlpha(160),
+                  fontSize: 12,
+                  fontWeight: FontWeight.w600),
+            ),
+            const SizedBox(height: 12),
+            // Overlay tabs
+            Row(children: [
+              _tab('💇 Hair',  ArOverlayStyle.hairstyle),
+              const SizedBox(width: 8),
+              _tab('🧔 Beard', ArOverlayStyle.beard),
+              const SizedBox(width: 8),
+              _tab('🎨 Color', ArOverlayStyle.hairColor),
+            ]),
+          ]),
+        ),
+      ]),
+    );
+  }
+
+  // ── Scan guide overlay ──────────────────────────────────────────────────────
+  Widget _buildScanGuide() {
+    return Center(
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          // Animated face outline guide
           Container(
-            color: const Color(0xFF0B0B0B),
-            padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
-            child: Column(
-              children: [
-                Row(
-                  children: [
-                    _overlayTab("💇 Hair", ArOverlayStyle.hairstyle),
-                    const SizedBox(width: 8),
-                    _overlayTab("🧔 Beard", ArOverlayStyle.beard),
-                    const SizedBox(width: 8),
-                    _overlayTab("🎨 Color", ArOverlayStyle.hairColor),
-                  ],
-                ),
-                const SizedBox(height: 10),
-                Text(
-                  "Previewing: $_currentStyleName",
-                  style: const TextStyle(color: Colors.white54, fontSize: 12),
-                ),
-              ],
+            width: 200, height: 260,
+            decoration: BoxDecoration(
+              border: Border.all(
+                  color: LuxuryTheme.purpleLight.withAlpha(120), width: 2),
+              borderRadius: BorderRadius.circular(120),
+            ),
+          ),
+          const SizedBox(height: 20),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+            decoration: BoxDecoration(
+              color: Colors.black54,
+              borderRadius: BorderRadius.circular(20),
+            ),
+            child: const Text(
+              'Position your face in the oval',
+              style: TextStyle(color: Colors.white70, fontSize: 13),
             ),
           ),
         ],
@@ -231,31 +297,57 @@ class _ArCameraPageState extends State<ArCameraPage> {
     );
   }
 
-  Widget _overlayTab(String label, ArOverlayStyle style) {
-    final bool isActive = _currentOverlay == style;
+  // ── Tab button ──────────────────────────────────────────────────────────────
+  Widget _tab(String label, ArOverlayStyle style) {
+    final active = _overlay == style;
     return Expanded(
       child: GestureDetector(
-        onTap: () => setState(() => _currentOverlay = style),
-        child: Container(
-          padding: const EdgeInsets.symmetric(vertical: 10),
+        onTap: () => setState(() => _overlay = style),
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 200),
+          padding: const EdgeInsets.symmetric(vertical: 11),
           decoration: BoxDecoration(
-            color: isActive ? _gold : const Color(0xFF1A1A1A),
+            gradient: active
+                ? const LinearGradient(
+                    colors: [LuxuryTheme.purple, LuxuryTheme.purpleLight])
+                : null,
+            color: active ? null : const Color(0xFF0A0A14),
             borderRadius: BorderRadius.circular(12),
             border: Border.all(
-              color: isActive ? _gold : Colors.white12,
+              color: active
+                  ? LuxuryTheme.purpleLight
+                  : LuxuryTheme.purple.withAlpha(60),
             ),
+            boxShadow: active
+                ? [BoxShadow(
+                    color: LuxuryTheme.purple.withAlpha(80),
+                    blurRadius: 10, offset: const Offset(0, 4))]
+                : null,
           ),
-          child: Text(
-            label,
-            textAlign: TextAlign.center,
-            style: TextStyle(
-              color: isActive ? Colors.black : Colors.white70,
-              fontWeight: FontWeight.w700,
-              fontSize: 13,
-            ),
-          ),
+          child: Text(label,
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                  color: active ? Colors.white : Colors.white38,
+                  fontWeight: FontWeight.w700,
+                  fontSize: 12)),
         ),
       ),
     );
   }
+
+  Widget _badge(String text, Color color) => Container(
+    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+    decoration: BoxDecoration(
+      color: Colors.black54,
+      borderRadius: BorderRadius.circular(20),
+      border: Border.all(color: color.withAlpha(120)),
+    ),
+    child: Row(mainAxisSize: MainAxisSize.min, children: [
+      Container(width: 6, height: 6,
+          decoration: BoxDecoration(color: color, shape: BoxShape.circle)),
+      const SizedBox(width: 6),
+      Text(text, style: TextStyle(color: color, fontSize: 11,
+          fontWeight: FontWeight.w600)),
+    ]),
+  );
 }

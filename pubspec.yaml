@@ -17,6 +17,7 @@ dependencies:
   firebase_core: ^4.4.0
   firebase_auth: ^6.1.4
   cloud_firestore: ^6.1.2
+  flutter_launcher_icons: ^0.14.4
 
   # Date formatting (VERY IMPORTANT for appointments UI)
   intl: ^0.20.2
@@ -30,6 +31,11 @@ dependencies:
 
   # Image processing
   image: ^4.8.0
+
+flutter_icons:
+  android: true
+  ios: true
+  image_path: "assets/icon/icon.png"
 
 dev_dependencies:
   flutter_test:
