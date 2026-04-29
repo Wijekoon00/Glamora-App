@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'register_page.dart';
+import 'widgets/luxury_form_widgets.dart';
 
 class LoginPage extends StatefulWidget {
   const LoginPage({super.key});
@@ -9,54 +10,57 @@ class LoginPage extends StatefulWidget {
   State<LoginPage> createState() => _LoginPageState();
 }
 
-class _LoginPageState extends State<LoginPage> {
-  final _emailController = TextEditingController();
-  final _passwordController = TextEditingController();
+class _LoginPageState extends State<LoginPage>
+    with SingleTickerProviderStateMixin {
+  final _emailCtrl    = TextEditingController();
+  final _passwordCtrl = TextEditingController();
+  final _formKey      = GlobalKey<FormState>();
 
   bool _obscure = true;
   bool _loading = false;
 
-  static const _bg = Color(0xFF0B0B0B);
-  static const _card = Color(0xFF141414);
-  static const _gold = Color(0xFFD4AF37);
+  late final AnimationController _animCtrl = AnimationController(
+    vsync: this,
+    duration: const Duration(milliseconds: 900),
+  )..forward();
+
+  late final Animation<double> _fadeAnim =
+      CurvedAnimation(parent: _animCtrl, curve: Curves.easeOut);
+
+  late final Animation<Offset> _slideAnim = Tween<Offset>(
+    begin: const Offset(0, 0.08),
+    end: Offset.zero,
+  ).animate(CurvedAnimation(parent: _animCtrl, curve: Curves.easeOut));
 
   @override
   void dispose() {
-    _emailController.dispose();
-    _passwordController.dispose();
+    _emailCtrl.dispose();
+    _passwordCtrl.dispose();
+    _animCtrl.dispose();
     super.dispose();
   }
 
   void _snack(String msg) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(msg),
-        backgroundColor: Colors.black87,
-      ),
-    );
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+      content: Text(msg),
+      backgroundColor: LuxuryTheme.purpleDim,
+      behavior: SnackBarBehavior.floating,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+    ));
   }
 
   Future<void> _login() async {
-    final email = _emailController.text.trim();
-    final pass = _passwordController.text.trim();
-
-    if (email.isEmpty || pass.isEmpty) {
-      _snack("Please enter email and password");
-      return;
-    }
-
+    if (!(_formKey.currentState?.validate() ?? false)) return;
     setState(() => _loading = true);
-
     try {
       await FirebaseAuth.instance.signInWithEmailAndPassword(
-        email: email,
-        password: pass,
+        email: _emailCtrl.text.trim(),
+        password: _passwordCtrl.text.trim(),
       );
-      // AuthWrapper will auto redirect after login
     } on FirebaseAuthException catch (e) {
-      _snack(e.message ?? "Login failed");
+      _snack(e.message ?? 'Login failed');
     } catch (e) {
-      _snack("Login failed: $e");
+      _snack('Login failed: $e');
     } finally {
       if (mounted) setState(() => _loading = false);
     }
@@ -65,195 +69,233 @@ class _LoginPageState extends State<LoginPage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: _bg,
-      body: SafeArea(
-        child: Center(
-          child: SingleChildScrollView(
-            padding: const EdgeInsets.all(20),
-            child: Container(
-              constraints: const BoxConstraints(maxWidth: 420),
-              padding: const EdgeInsets.all(18),
-              decoration: BoxDecoration(
-                color: _card,
-                borderRadius: BorderRadius.circular(22),
-                border: Border.all(color: _gold.withOpacity(0.35)),
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.black.withOpacity(0.5),
-                    blurRadius: 18,
-                    offset: const Offset(0, 10),
-                  )
-                ],
-              ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  const SizedBox(height: 6),
-                  Center(
-                    child: Column(
-                      children: [
-                        Container(
-                          height: 74,
-                          width: 74,
-                          decoration: BoxDecoration(
-                            shape: BoxShape.circle,
-                            color: _gold.withOpacity(0.14),
-                            border: Border.all(color: _gold.withOpacity(0.55)),
-                          ),
-                          child: const Icon(Icons.spa, color: _gold, size: 34),
-                        ),
-                        const SizedBox(height: 12),
-                        const Text(
-                          "Glamora Salon",
-                          style: TextStyle(
-                            color: Colors.white,
-                            fontSize: 22,
-                            fontWeight: FontWeight.w800,
-                            letterSpacing: 0.3,
-                          ),
-                        ),
-                        const SizedBox(height: 6),
-                        Text(
-                          "Sign in to manage appointments & services",
-                          textAlign: TextAlign.center,
-                          style: TextStyle(
-                            color: Colors.white.withOpacity(0.7),
-                            fontSize: 13,
-                          ),
-                        ),
-                      ],
+      backgroundColor: LuxuryTheme.black,
+      body: Stack(
+        children: [
+          // ── Decorative background blobs ──────────────────────────────
+          Positioned(top: -80, right: -60,
+              child: _blob(220, LuxuryTheme.purple.withAlpha(40))),
+          Positioned(bottom: -100, left: -80,
+              child: _blob(280, LuxuryTheme.purpleLight.withAlpha(25))),
+          Positioned(top: 180, left: -40,
+              child: _blob(140, LuxuryTheme.gold.withAlpha(15))),
+
+          // ── Main content ─────────────────────────────────────────────
+          SafeArea(
+            child: Center(
+              child: SingleChildScrollView(
+                padding: const EdgeInsets.symmetric(
+                    horizontal: 24, vertical: 32),
+                child: FadeTransition(
+                  opacity: _fadeAnim,
+                  child: SlideTransition(
+                    position: _slideAnim,
+                    child: ConstrainedBox(
+                      constraints: const BoxConstraints(maxWidth: 420),
+                      child: Column(children: [
+                        _buildLogo(),
+                        const SizedBox(height: 36),
+                        _buildFormCard(),
+                        const SizedBox(height: 24),
+                        _buildRegisterLink(),
+                      ]),
                     ),
                   ),
-                  const SizedBox(height: 22),
-
-                  _GoldTextField(
-                    controller: _emailController,
-                    hint: "Email",
-                    icon: Icons.email_outlined,
-                    keyboardType: TextInputType.emailAddress,
-                  ),
-                  const SizedBox(height: 12),
-                  _GoldTextField(
-                    controller: _passwordController,
-                    hint: "Password",
-                    icon: Icons.lock_outline,
-                    obscureText: _obscure,
-                    suffix: IconButton(
-                      onPressed: () => setState(() => _obscure = !_obscure),
-                      icon: Icon(
-                        _obscure ? Icons.visibility_off : Icons.visibility,
-                        color: _gold.withOpacity(0.9),
-                      ),
-                    ),
-                  ),
-
-                  const SizedBox(height: 18),
-                  SizedBox(
-                    height: 50,
-                    child: ElevatedButton(
-                      onPressed: _loading ? null : _login,
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: _gold,
-                        foregroundColor: Colors.black,
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(16),
-                        ),
-                        elevation: 0,
-                      ),
-                      child: _loading
-                          ? const SizedBox(
-                              height: 22,
-                              width: 22,
-                              child: CircularProgressIndicator(strokeWidth: 2),
-                            )
-                          : const Text(
-                              "Login",
-                              style: TextStyle(
-                                fontSize: 16,
-                                fontWeight: FontWeight.w800,
-                              ),
-                            ),
-                    ),
-                  ),
-
-                  const SizedBox(height: 14),
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Text(
-                        "Don't have an account? ",
-                        style: TextStyle(color: Colors.white.withOpacity(0.7)),
-                      ),
-                      TextButton(
-                        onPressed: () {
-                          Navigator.push(
-                            context,
-                            MaterialPageRoute(
-                              builder: (_) => const RegisterPage(),
-                            ),
-                          );
-                        },
-                        child: const Text(
-                          "Register",
-                          style: TextStyle(color: _gold, fontWeight: FontWeight.w700),
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 6),
-                ],
+                ),
               ),
             ),
           ),
-        ),
+        ],
       ),
     );
   }
-}
 
-class _GoldTextField extends StatelessWidget {
-  const _GoldTextField({
-    required this.controller,
-    required this.hint,
-    required this.icon,
-    this.keyboardType,
-    this.obscureText = false,
-    this.suffix,
-  });
-
-  final TextEditingController controller;
-  final String hint;
-  final IconData icon;
-  final TextInputType? keyboardType;
-  final bool obscureText;
-  final Widget? suffix;
-
-  static const _gold = Color(0xFFD4AF37);
-
-  @override
-  Widget build(BuildContext context) {
-    return TextField(
-      controller: controller,
-      keyboardType: keyboardType,
-      obscureText: obscureText,
-      style: const TextStyle(color: Colors.white),
-      cursorColor: _gold,
-      decoration: InputDecoration(
-        filled: true,
-        fillColor: const Color(0xFF0F0F0F),
-        prefixIcon: Icon(icon, color: _gold.withOpacity(0.9)),
-        suffixIcon: suffix,
-        hintText: hint,
-        hintStyle: TextStyle(color: Colors.white.withOpacity(0.55)),
-        enabledBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(16),
-          borderSide: BorderSide(color: _gold.withOpacity(0.35)),
+  // ── Logo ─────────────────────────────────────────────────────────────────────
+  Widget _buildLogo() {
+    return Column(children: [
+      // Glow ring + icon
+      Container(
+        width: 100, height: 100,
+        decoration: BoxDecoration(
+          shape: BoxShape.circle,
+          gradient: RadialGradient(colors: [
+            LuxuryTheme.purple.withAlpha(60),
+            Colors.transparent,
+          ]),
         ),
-        focusedBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(16),
-          borderSide: const BorderSide(color: _gold, width: 1.2),
+        child: Center(
+          child: Container(
+            width: 80, height: 80,
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              color: LuxuryTheme.card,
+              border: Border.all(
+                  color: LuxuryTheme.purpleLight.withAlpha(180), width: 1.5),
+              boxShadow: [
+                BoxShadow(color: LuxuryTheme.purple.withAlpha(80),
+                    blurRadius: 24, spreadRadius: 2),
+              ],
+            ),
+            child: const Icon(Icons.spa_rounded,
+                color: LuxuryTheme.goldLight, size: 36),
+          ),
         ),
+      ),
+      const SizedBox(height: 20),
+
+      // Brand name — gradient text
+      ShaderMask(
+        shaderCallback: (b) => const LinearGradient(
+          colors: [LuxuryTheme.goldLight, LuxuryTheme.gold,
+            LuxuryTheme.purpleLight],
+          stops: [0.0, 0.5, 1.0],
+        ).createShader(b),
+        child: const Text(
+          'GLAMORA',
+          style: TextStyle(
+            color: Colors.white,
+            fontSize: 32,
+            fontWeight: FontWeight.w900,
+            letterSpacing: 8,
+          ),
+        ),
+      ),
+      const SizedBox(height: 6),
+      Text(
+        'LUXURY SALON & SPA',
+        style: TextStyle(
+          color: LuxuryTheme.purpleLight.withAlpha(200),
+          fontSize: 11,
+          letterSpacing: 4,
+        ),
+      ),
+      const SizedBox(height: 12),
+
+      // Decorative divider
+      Row(mainAxisAlignment: MainAxisAlignment.center, children: [
+        _divLine(reverse: true),
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 10),
+          child: Icon(Icons.diamond_outlined,
+              color: LuxuryTheme.gold.withAlpha(160), size: 14),
+        ),
+        _divLine(),
+      ]),
+    ]);
+  }
+
+  // ── Form card ────────────────────────────────────────────────────────────────
+  Widget _buildFormCard() {
+    return Container(
+      padding: const EdgeInsets.all(28),
+      decoration: BoxDecoration(
+        color: LuxuryTheme.card,
+        borderRadius: BorderRadius.circular(28),
+        border: Border.all(
+            color: LuxuryTheme.purpleLight.withAlpha(60), width: 1),
+        boxShadow: [
+          BoxShadow(
+            color: LuxuryTheme.purple.withAlpha(40),
+            blurRadius: 40, spreadRadius: -5,
+            offset: const Offset(0, 16),
+          ),
+          BoxShadow(
+            color: Colors.black.withAlpha(180),
+            blurRadius: 20, offset: const Offset(0, 8),
+          ),
+        ],
+      ),
+      child: Form(
+        key: _formKey,
+        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          const Text(
+            'Welcome Back',
+            style: TextStyle(color: Colors.white, fontSize: 22,
+                fontWeight: FontWeight.w700, letterSpacing: 0.3),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            'Sign in to your account',
+            style: TextStyle(color: Colors.white.withAlpha(120), fontSize: 13),
+          ),
+          const SizedBox(height: 28),
+
+          LuxuryField(
+            controller: _emailCtrl,
+            label: 'Email Address',
+            hint: 'your@email.com',
+            icon: Icons.alternate_email_rounded,
+            keyboardType: TextInputType.emailAddress,
+            validator: (v) {
+              if (v == null || v.trim().isEmpty) return 'Email is required';
+              if (!v.contains('@')) return 'Enter a valid email';
+              return null;
+            },
+          ),
+          const SizedBox(height: 16),
+
+          LuxuryField(
+            controller: _passwordCtrl,
+            label: 'Password',
+            hint: '••••••••',
+            icon: Icons.lock_outline_rounded,
+            obscureText: _obscure,
+            validator: (v) =>
+                (v == null || v.isEmpty) ? 'Password is required' : null,
+            suffix: GestureDetector(
+              onTap: () => setState(() => _obscure = !_obscure),
+              child: Icon(
+                _obscure
+                    ? Icons.visibility_off_outlined
+                    : Icons.visibility_outlined,
+                color: LuxuryTheme.purpleLight.withAlpha(180), size: 20,
+              ),
+            ),
+          ),
+          const SizedBox(height: 28),
+
+          LuxuryButton(
+            label: 'Sign In',
+            loading: _loading,
+            onTap: _login,
+          ),
+        ]),
       ),
     );
   }
+
+  // ── Register link ─────────────────────────────────────────────────────────────
+  Widget _buildRegisterLink() {
+    return Row(mainAxisAlignment: MainAxisAlignment.center, children: [
+      Text('New to Glamora? ',
+          style: TextStyle(
+              color: Colors.white.withAlpha(120), fontSize: 13)),
+      GestureDetector(
+        onTap: () => Navigator.push(context,
+            MaterialPageRoute(builder: (_) => const RegisterPage())),
+        child: const Text(
+          'Create Account',
+          style: TextStyle(color: LuxuryTheme.purpleLight,
+              fontSize: 13, fontWeight: FontWeight.w700),
+        ),
+      ),
+    ]);
+  }
+
+  // ── Helpers ───────────────────────────────────────────────────────────────────
+  Widget _blob(double size, Color color) => Container(
+    width: size, height: size,
+    decoration: BoxDecoration(shape: BoxShape.circle, color: color),
+  );
+
+  Widget _divLine({bool reverse = false}) => Container(
+    width: 50, height: 1,
+    decoration: BoxDecoration(
+      gradient: LinearGradient(
+        colors: reverse
+            ? [LuxuryTheme.gold.withAlpha(120), Colors.transparent]
+            : [Colors.transparent, LuxuryTheme.gold.withAlpha(120)],
+      ),
+    ),
+  );
 }
