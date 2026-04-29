@@ -7,6 +7,7 @@ import 'models/service_model.dart';
 import 'models/appointment_model.dart';
 import 'services/service_repo.dart';
 import 'services/appointment_repo.dart';
+import 'services/review_repo.dart';
 
 class UserServicesPage extends StatefulWidget {
   const UserServicesPage({super.key});
@@ -18,6 +19,7 @@ class UserServicesPage extends StatefulWidget {
 class _UserServicesPageState extends State<UserServicesPage> {
   final serviceRepo = ServiceRepo();
   final appointmentRepo = AppointmentRepo();
+  final reviewRepo = ReviewRepo();
 
   static const _bg = Color(0xFF0B0B0B);
   static const _card = Color(0xFF141414);
@@ -26,10 +28,7 @@ class _UserServicesPageState extends State<UserServicesPage> {
   void _toast(String msg) {
     if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(msg),
-        backgroundColor: _card,
-      ),
+      SnackBar(content: Text(msg), backgroundColor: _card),
     );
   }
 
@@ -55,7 +54,9 @@ class _UserServicesPageState extends State<UserServicesPage> {
           .get();
 
       final userData = userDoc.data() ?? {};
-      final userName = (userData['name'] ?? 'Unknown User').toString();
+      final userName =
+          (userData['name'] ?? user.displayName ?? user.email ?? "Customer")
+              .toString();
 
       final appointment = AppointmentModel(
         id: '',
@@ -70,11 +71,15 @@ class _UserServicesPageState extends State<UserServicesPage> {
         status: 'pending',
       );
 
-      await appointmentRepo.bookAppointment(appointment);
+      final result = await appointmentRepo.bookAppointmentSafe(appointment);
 
-      _toast("Appointment booked successfully ✅");
+      if (result != null) {
+        _toast(result);
+      } else {
+        _toast("Appointment booked successfully ✅");
+      }
     } catch (e) {
-      _toast("Booking failed: $e");
+      _toast("Booking failed");
     }
   }
 
@@ -86,6 +91,7 @@ class _UserServicesPageState extends State<UserServicesPage> {
 
     DateTime? selectedDate;
     String? selectedTime;
+    List<String> bookedSlots = [];
     bool isSaving = false;
 
     final timeSlots = [
@@ -102,75 +108,124 @@ class _UserServicesPageState extends State<UserServicesPage> {
       context: context,
       builder: (_) => StatefulBuilder(
         builder: (context, setStateDialog) {
+          Future<void> pickDate() async {
+            final date = await showDatePicker(
+              context: context,
+              firstDate: DateTime.now(),
+              lastDate: DateTime.now().add(const Duration(days: 30)),
+              initialDate: DateTime.now(),
+            );
+
+            if (date != null) {
+              setStateDialog(() {
+                selectedDate = date;
+                selectedTime = null;
+                bookedSlots = [];
+              });
+
+              _toast("Loading available slots...");
+
+              try {
+                final slots = await appointmentRepo.getBookedTimeSlots(date);
+                setStateDialog(() {
+                  bookedSlots = slots;
+                });
+              } catch (e) {
+                _toast("Loading slots... please wait ⏳");
+              }
+            }
+          }
+
           return AlertDialog(
             backgroundColor: _card,
             title: Text(
               "Book ${service.name}",
               style: const TextStyle(color: Colors.white),
             ),
-            content: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                SizedBox(
-                  width: double.infinity,
-                  child: ElevatedButton(
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: _gold,
-                      foregroundColor: Colors.black,
+            content: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  SizedBox(
+                    width: double.infinity,
+                    child: ElevatedButton(
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: _gold,
+                        foregroundColor: Colors.black,
+                      ),
+                      onPressed: pickDate,
+                      child: Text(
+                        selectedDate == null
+                            ? "Select Date"
+                            : DateFormat('yyyy-MM-dd').format(selectedDate!),
+                      ),
                     ),
-                    onPressed: () async {
-                      final date = await showDatePicker(
-                        context: context,
-                        firstDate: DateTime.now(),
-                        lastDate: DateTime.now().add(const Duration(days: 30)),
-                        initialDate: DateTime.now(),
-                      );
+                  ),
+                  const SizedBox(height: 16),
+                  const Text(
+                    "Select Time Slot",
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                  const SizedBox(height: 10),
+                  Wrap(
+                    spacing: 8,
+                    runSpacing: 8,
+                    children: timeSlots.map((slot) {
+                      final isBooked = bookedSlots.contains(slot);
+                      final isSelected = selectedTime == slot;
 
-                      if (date != null) {
-                        setStateDialog(() => selectedDate = date);
-                      }
-                    },
-                    child: Text(
-                      selectedDate == null
-                          ? "Select Date"
-                          : DateFormat('yyyy-MM-dd').format(selectedDate!),
-                    ),
-                  ),
-                ),
-                const SizedBox(height: 12),
-                DropdownButtonFormField<String>(
-                  value: selectedTime,
-                  dropdownColor: _card,
-                  style: const TextStyle(color: Colors.white),
-                  decoration: InputDecoration(
-                    filled: true,
-                    fillColor: const Color(0xFF0F0F0F),
-                    enabledBorder: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(12),
-                      borderSide: BorderSide(color: _gold.withOpacity(0.35)),
-                    ),
-                    focusedBorder: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(12),
-                      borderSide: const BorderSide(color: _gold),
-                    ),
-                  ),
-                  hint: const Text(
-                    "Select Time",
-                    style: TextStyle(color: Colors.white70),
-                  ),
-                  items: timeSlots
-                      .map(
-                        (t) => DropdownMenuItem<String>(
-                          value: t,
-                          child: Text(t),
+                      return ChoiceChip(
+                        label: Text(slot),
+                        selected: isSelected,
+                        onSelected: (selectedDate == null || isBooked)
+                            ? null
+                            : (_) {
+                                setStateDialog(() {
+                                  selectedTime = slot;
+                                });
+                              },
+                        selectedColor: _gold,
+                        backgroundColor: isBooked
+                            ? Colors.red.withOpacity(0.18)
+                            : const Color(0xFF0F0F0F),
+                        disabledColor: isBooked
+                            ? Colors.red.withOpacity(0.18)
+                            : const Color(0xFF0F0F0F),
+                        labelStyle: TextStyle(
+                          color: isBooked
+                              ? Colors.redAccent
+                              : isSelected
+                                  ? Colors.black
+                                  : Colors.white,
+                          fontWeight: FontWeight.w600,
                         ),
-                      )
-                      .toList(),
-                  onChanged: (val) {
-                    setStateDialog(() => selectedTime = val);
-                  },
-                ),
-              ],
+                        side: BorderSide(
+                          color: isBooked
+                              ? Colors.redAccent
+                              : isSelected
+                                  ? _gold
+                                  : Colors.white24,
+                        ),
+                      );
+                    }).toList(),
+                  ),
+                  const SizedBox(height: 10),
+                  if (selectedDate == null)
+                    const Text(
+                      "Please select a date first",
+                      style: TextStyle(color: Colors.white54, fontSize: 12),
+                    ),
+                  if (selectedDate != null)
+                    const Text(
+                      "Red time slots are already booked",
+                      style: TextStyle(color: Colors.redAccent, fontSize: 12),
+                    ),
+                ],
+              ),
             ),
             actions: [
               TextButton(
@@ -190,6 +245,11 @@ class _UserServicesPageState extends State<UserServicesPage> {
                     : () async {
                         if (selectedDate == null || selectedTime == null) {
                           _toast("Select date and time");
+                          return;
+                        }
+
+                        if (bookedSlots.contains(selectedTime)) {
+                          _toast("This time slot is already booked");
                           return;
                         }
 
@@ -242,6 +302,48 @@ class _UserServicesPageState extends State<UserServicesPage> {
           fontSize: 12,
         ),
       ),
+    );
+  }
+
+  Widget _ratingWidget(String serviceId) {
+    return FutureBuilder<List<dynamic>>(
+      future: Future.wait([
+        reviewRepo.getAverageRating(serviceId),
+        reviewRepo.getReviewCount(serviceId),
+      ]),
+      builder: (context, snapshot) {
+        if (!snapshot.hasData) {
+          return const Text(
+            "Rating: Loading...",
+            style: TextStyle(color: Colors.white54, fontSize: 13),
+          );
+        }
+
+        final avg = snapshot.data![0] as double;
+        final count = snapshot.data![1] as int;
+
+        if (count == 0) {
+          return const Text(
+            "No ratings yet",
+            style: TextStyle(color: Colors.white54, fontSize: 13),
+          );
+        }
+
+        return Row(
+          children: [
+            const Icon(Icons.star, color: _gold, size: 18),
+            const SizedBox(width: 4),
+            Text(
+              "${avg.toStringAsFixed(1)} ($count reviews)",
+              style: const TextStyle(
+                color: Colors.white70,
+                fontWeight: FontWeight.w600,
+                fontSize: 13,
+              ),
+            ),
+          ],
+        );
+      },
     );
   }
 
@@ -315,6 +417,8 @@ class _UserServicesPageState extends State<UserServicesPage> {
                         "Category: ${s.category}",
                         style: const TextStyle(color: Colors.white70),
                       ),
+                      const SizedBox(height: 6),
+                      _ratingWidget(s.id),
                       const SizedBox(height: 8),
                       _statusChip(s.isActive),
                       const SizedBox(height: 12),

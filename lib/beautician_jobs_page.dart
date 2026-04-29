@@ -18,13 +18,12 @@ class _BeauticianJobsPageState extends State<BeauticianJobsPage> {
   static const _card = Color(0xFF141414);
   static const _gold = Color(0xFFD4AF37);
 
+  bool _loading = false;
+
   void _toast(String msg) {
     if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(msg),
-        backgroundColor: _card,
-      ),
+      SnackBar(content: Text(msg), backgroundColor: _card),
     );
   }
 
@@ -42,48 +41,72 @@ class _BeauticianJobsPageState extends State<BeauticianJobsPage> {
   }
 
   Future<void> _updateStatus(String id, String status) async {
+    if (_loading) return;
+
+    setState(() => _loading = true);
+
     try {
       await repo.updateStatus(id, status);
-      _toast("Appointment updated ✅");
+
+      if (status == 'approved') {
+        _toast("Appointment approved ✅");
+      } else if (status == 'cancelled') {
+        _toast("Appointment cancelled ❌");
+      } else if (status == 'completed') {
+        _toast("Appointment completed ✅");
+      } else {
+        _toast("Updated successfully");
+      }
     } catch (e) {
-      _toast("Update failed: $e");
+      _toast("Update failed");
+    } finally {
+      if (mounted) setState(() => _loading = false);
     }
   }
 
   Widget _buildActionButtons(AppointmentModel a) {
     if (a.status == 'pending') {
-      return Wrap(
-        spacing: 8,
-        runSpacing: 8,
+      return Row(
         children: [
-          ElevatedButton(
-            style: ElevatedButton.styleFrom(
-              backgroundColor: Colors.green,
-              foregroundColor: Colors.white,
+          Expanded(
+            child: ElevatedButton(
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.green,
+                foregroundColor: Colors.white,
+              ),
+              onPressed:
+                  _loading ? null : () => _updateStatus(a.id, 'approved'),
+              child: const Text("Approve"),
             ),
-            onPressed: () => _updateStatus(a.id, 'approved'),
-            child: const Text("Approve"),
           ),
-          ElevatedButton(
-            style: ElevatedButton.styleFrom(
-              backgroundColor: Colors.redAccent,
-              foregroundColor: Colors.white,
+          const SizedBox(width: 8),
+          Expanded(
+            child: ElevatedButton(
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.redAccent,
+                foregroundColor: Colors.white,
+              ),
+              onPressed:
+                  _loading ? null : () => _updateStatus(a.id, 'cancelled'),
+              child: const Text("Cancel"),
             ),
-            onPressed: () => _updateStatus(a.id, 'cancelled'),
-            child: const Text("Cancel"),
           ),
         ],
       );
     }
 
     if (a.status == 'approved') {
-      return ElevatedButton(
-        style: ElevatedButton.styleFrom(
-          backgroundColor: _gold,
-          foregroundColor: Colors.black,
+      return SizedBox(
+        width: double.infinity,
+        child: ElevatedButton(
+          style: ElevatedButton.styleFrom(
+            backgroundColor: _gold,
+            foregroundColor: Colors.black,
+          ),
+          onPressed:
+              _loading ? null : () => _updateStatus(a.id, 'completed'),
+          child: const Text("Mark Completed"),
         ),
-        onPressed: () => _updateStatus(a.id, 'completed'),
-        child: const Text("Mark Completed"),
       );
     }
 
@@ -102,20 +125,23 @@ class _BeauticianJobsPageState extends State<BeauticianJobsPage> {
           }
 
           if (snapshot.hasError) {
-            return Center(
+            return const Center(
               child: Text(
-                "Error: ${snapshot.error}",
-                style: const TextStyle(color: Colors.white70),
+                "Error loading appointments",
+                style: TextStyle(color: Colors.white70),
               ),
             );
           }
 
-          final appointments = snapshot.data ?? [];
+          // 🔥 ONLY SHOW ACTIVE APPOINTMENTS
+          final appointments = (snapshot.data ?? [])
+              .where((a) => a.status == 'pending' || a.status == 'approved')
+              .toList();
 
           if (appointments.isEmpty) {
             return const Center(
               child: Text(
-                "No appointments found",
+                "No active appointments",
                 style: TextStyle(color: Colors.white70),
               ),
             );
