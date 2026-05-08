@@ -30,10 +30,13 @@ class _ArCameraPageState extends State<ArCameraPage> {
   bool  _cameraReady  = false;
   bool  _processing   = false;
   bool  _isFront      = true;
-  int   _sensorDeg    = 270; // will be updated from camera description
+  int   _sensorDeg    = 270;
 
   List<Face> _faces     = [];
   Size       _imageSize = Size.zero;
+
+  // Smoothed states — one per detected face, persisted across frames
+  final List<SmoothedFaceState> _smoothedStates = [];
 
   ArOverlayStyle _overlay = ArOverlayStyle.hairstyle;
 
@@ -101,6 +104,26 @@ class _ArCameraPageState extends State<ArCameraPage> {
       final faces = await _detector.processImage(inputImage);
 
       if (mounted) {
+        // Sync smoothed states list size with detected faces
+        while (_smoothedStates.length < faces.length) {
+          final t = _CoordTransformerHelper(
+            imageSize: Size(img.width.toDouble(), img.height.toDouble()),
+            sensorDegrees: _sensorDeg,
+            isFrontCamera: _isFront,
+          );
+          final box = t.transformRect(faces[_smoothedStates.length].boundingBox);
+          _smoothedStates.add(SmoothedFaceState(
+            left: box.left, top: box.top,
+            right: box.right, bottom: box.bottom,
+            yaw: faces[_smoothedStates.length].headEulerAngleY ?? 0.0,
+            roll: faces[_smoothedStates.length].headEulerAngleZ ?? 0.0,
+          ));
+        }
+        // Trim if fewer faces detected
+        if (_smoothedStates.length > faces.length) {
+          _smoothedStates.removeRange(faces.length, _smoothedStates.length);
+        }
+
         setState(() {
           _faces     = faces;
           _imageSize = Size(img.width.toDouble(), img.height.toDouble());
@@ -178,13 +201,14 @@ class _ArCameraPageState extends State<ArCameraPage> {
                       CustomPaint(
                         size: canvasSize,
                         painter: ArFacePainter(
-                          faces:         _faces,
-                          imageSize:     _imageSize,
-                          overlayStyle:  _overlay,
-                          styleName:     _currentStyleName,
-                          hairColor:     widget.hairColor,
-                          sensorDegrees: _sensorDeg,
-                          isFrontCamera: _isFront,
+                          faces:          _faces,
+                          imageSize:      _imageSize,
+                          overlayStyle:   _overlay,
+                          styleName:      _currentStyleName,
+                          hairColor:      widget.hairColor,
+                          sensorDegrees:  _sensorDeg,
+                          isFrontCamera:  _isFront,
+                          smoothedStates: _smoothedStates,
                         ),
                       ),
 
@@ -350,4 +374,54 @@ class _ArCameraPageState extends State<ArCameraPage> {
           fontWeight: FontWeight.w600)),
     ]),
   );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Lightweight coord helper used only for initialising SmoothedFaceState
+// (the full transformer lives in ar_face_painter.dart)
+// ─────────────────────────────────────────────────────────────────────────────
+class _CoordTransformerHelper {
+  final Size imageSize;
+  final int sensorDegrees;
+  final bool isFrontCamera;
+
+  late final double _scaleX, _scaleY, _offsetX, _offsetY;
+  late final Size _rotated;
+
+  _CoordTransformerHelper({
+    required this.imageSize,
+    required this.sensorDegrees,
+    required this.isFrontCamera,
+  }) {
+    final bool rot90 = sensorDegrees == 90 || sensorDegrees == 270;
+    _rotated = rot90
+        ? Size(imageSize.height, imageSize.width)
+        : imageSize;
+    // Use a fixed canvas estimate (doesn't matter for init — will be
+    // corrected by SmoothedFaceState.update() on the first real frame)
+    const double kW = 400, kH = 800;
+    final double imgA = _rotated.width / _rotated.height;
+    final double canA = kW / kH;
+    double rW, rH;
+    if (imgA > canA) { rH = kH; rW = rH * imgA; }
+    else             { rW = kW; rH = rW / imgA; }
+    _scaleX  = rW / _rotated.width;
+    _scaleY  = rH / _rotated.height;
+    _offsetX = (kW - rW) / 2;
+    _offsetY = (kH - rH) / 2;
+  }
+
+  Offset _pt(double rawX, double rawY) {
+    double x = rawX, y = rawY;
+    switch (sensorDegrees) {
+      case 90:  final t = x; x = y; y = imageSize.width  - t; break;
+      case 270: final t = y; y = x; x = imageSize.height - t; break;
+      case 180: x = imageSize.width - x; y = imageSize.height - y; break;
+    }
+    if (isFrontCamera) x = _rotated.width - x;
+    return Offset(x * _scaleX + _offsetX, y * _scaleY + _offsetY);
+  }
+
+  Rect transformRect(Rect r) =>
+      Rect.fromPoints(_pt(r.left, r.top), _pt(r.right, r.bottom));
 }
