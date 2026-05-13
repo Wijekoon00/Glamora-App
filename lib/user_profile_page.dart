@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'widgets/luxury_form_widgets.dart';
+import 'widgets/profile_avatar_widget.dart';
 
 class UserProfilePage extends StatelessWidget {
   const UserProfilePage({super.key});
@@ -30,8 +31,12 @@ class UserProfilePage extends StatelessWidget {
             child: Column(
               children: [
                 const SizedBox(height: 10),
-                // Avatar
-                _buildAvatar(name),
+                // Avatar with upload
+                ProfileAvatarWidget(
+                  name: name,
+                  uid: user?.uid ?? '',
+                  size: 90,
+                ),
                 const SizedBox(height: 20),
                 // Name + role badge
                 Text(
@@ -78,58 +83,6 @@ class UserProfilePage extends StatelessWidget {
           );
         },
       ),
-    );
-  }
-
-  Widget _buildAvatar(String name) {
-    final initials = name.trim().isNotEmpty
-        ? name.trim().split(' ').map((w) => w[0]).take(2).join().toUpperCase()
-        : 'G';
-
-    return Stack(
-      alignment: Alignment.center,
-      children: [
-        // Outer glow
-        Container(
-          width: 110, height: 110,
-          decoration: BoxDecoration(
-            shape: BoxShape.circle,
-            gradient: RadialGradient(colors: [
-              LuxuryTheme.purple.withAlpha(60),
-              Colors.transparent,
-            ]),
-          ),
-        ),
-        // Avatar circle
-        Container(
-          width: 90, height: 90,
-          decoration: BoxDecoration(
-            shape: BoxShape.circle,
-            gradient: const LinearGradient(
-              colors: [LuxuryTheme.purple, LuxuryTheme.purpleLight],
-              begin: Alignment.topLeft,
-              end: Alignment.bottomRight,
-            ),
-            boxShadow: [
-              BoxShadow(
-                color: LuxuryTheme.purple.withAlpha(100),
-                blurRadius: 20,
-                spreadRadius: 2,
-              ),
-            ],
-          ),
-          child: Center(
-            child: Text(
-              initials,
-              style: const TextStyle(
-                color: Colors.white,
-                fontSize: 28,
-                fontWeight: FontWeight.w800,
-              ),
-            ),
-          ),
-        ),
-      ],
     );
   }
 

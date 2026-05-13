@@ -5,6 +5,7 @@ import 'user_services_page.dart';
 import 'user_appointments_page.dart';
 import 'user_profile_page.dart';
 import 'user_ai_page.dart';
+import 'user_history_page.dart';
 import 'widgets/luxury_nav_bar.dart';
 import 'widgets/luxury_form_widgets.dart';
 
@@ -21,6 +22,7 @@ class _CustomerNavPageState extends State<CustomerNavPage> {
   static const _pages = [
     UserServicesPage(),
     UserAppointmentsPage(),
+    UserHistoryPage(),
     UserAiPage(),
     UserProfilePage(),
   ];
@@ -28,6 +30,7 @@ class _CustomerNavPageState extends State<CustomerNavPage> {
   static const _titles = [
     'Services',
     'Appointments',
+    'My History',
     'AI Stylist',
     'Profile',
   ];
@@ -42,6 +45,11 @@ class _CustomerNavPageState extends State<CustomerNavPage> {
       icon: Icons.calendar_today_outlined,
       activeIcon: Icons.calendar_month_rounded,
       label: 'Bookings',
+    ),
+    LuxuryNavItem(
+      icon: Icons.history_outlined,
+      activeIcon: Icons.history_rounded,
+      label: 'History',
     ),
     LuxuryNavItem(
       icon: Icons.face_retouching_off_outlined,

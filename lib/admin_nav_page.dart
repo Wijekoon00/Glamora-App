@@ -5,6 +5,7 @@ import 'test_page.dart';
 import 'pages/admin_services_page.dart';
 import 'pages/admin_appointments_page.dart';
 import 'admin_dashboard_page.dart';
+import 'admin_profile_page.dart';
 import 'widgets/luxury_nav_bar.dart';
 import 'widgets/luxury_form_widgets.dart';
 
@@ -23,6 +24,7 @@ class _AdminNavPageState extends State<AdminNavPage> {
     AdminServicesPage(),
     AdminAppointmentsPage(),
     AdminDashboardPage(),
+    AdminProfilePage(),
   ];
 
   static const _titles = [
@@ -30,6 +32,7 @@ class _AdminNavPageState extends State<AdminNavPage> {
     'Services',
     'Appointments',
     'Users',
+    'Profile',
   ];
 
   static const _navItems = [
@@ -52,6 +55,11 @@ class _AdminNavPageState extends State<AdminNavPage> {
       icon: Icons.people_outline_rounded,
       activeIcon: Icons.people_rounded,
       label: 'Users',
+    ),
+    LuxuryNavItem(
+      icon: Icons.person_outline_rounded,
+      activeIcon: Icons.person_rounded,
+      label: 'Profile',
     ),
   ];
 
