@@ -22,6 +22,17 @@ class _UserServicesPageState extends State<UserServicesPage> {
   final appointmentRepo = AppointmentRepo();
   final reviewRepo = ReviewRepo();
 
+  // Search & filter state
+  final _searchCtrl = TextEditingController();
+  String _searchQuery = '';
+  String _filterCategory = 'All';
+
+  @override
+  void dispose() {
+    _searchCtrl.dispose();
+    super.dispose();
+  }
+
   void _toast(String msg) {
     if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
@@ -689,75 +700,106 @@ class _UserServicesPageState extends State<UserServicesPage> {
         stream: serviceRepo.streamServices(),
         builder: (context, snapshot) {
           if (snapshot.connectionState == ConnectionState.waiting) {
-            return const Center(
-              child: CircularProgressIndicator(
-                color: LuxuryTheme.purpleLight,
-              ),
-            );
+            return const Center(child: CircularProgressIndicator(color: LuxuryTheme.purpleLight));
           }
-
           if (snapshot.hasError) {
-            return Center(
-              child: Text(
-                "Error: ${snapshot.error}",
-                style: const TextStyle(color: Colors.white70),
-              ),
-            );
+            return Center(child: Text("Error: ${snapshot.error}", style: const TextStyle(color: Colors.white70)));
           }
 
-          final services = snapshot.data ?? [];
+          final allServices = snapshot.data ?? [];
 
-          if (services.isEmpty) {
-            return Center(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Container(
-                    width: 72,
-                    height: 72,
-                    decoration: BoxDecoration(
-                      color: LuxuryTheme.purpleDim.withAlpha(180),
-                      shape: BoxShape.circle,
-                      border: Border.all(
-                        color: LuxuryTheme.purple.withAlpha(80),
-                      ),
-                    ),
-                    child: const Icon(
-                      Icons.spa_rounded,
-                      color: LuxuryTheme.purpleLight,
-                      size: 32,
+          // Collect unique categories
+          final categories = ['All', ...{...allServices.map((s) => s.category)}];
+
+          // Apply search + category filter
+          final services = allServices.where((s) {
+            final matchSearch = _searchQuery.isEmpty ||
+                s.name.toLowerCase().contains(_searchQuery) ||
+                s.category.toLowerCase().contains(_searchQuery);
+            final matchCat = _filterCategory == 'All' || s.category == _filterCategory;
+            return matchSearch && matchCat;
+          }).toList();
+
+          return Column(children: [
+            // ── Search bar ─────────────────────────────────────────────
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 14, 16, 0),
+              child: Column(children: [
+                Container(
+                  decoration: BoxDecoration(
+                    color: LuxuryTheme.card,
+                    borderRadius: BorderRadius.circular(14),
+                    border: Border.all(color: LuxuryTheme.purple.withAlpha(80)),
+                  ),
+                  child: TextField(
+                    controller: _searchCtrl,
+                    style: const TextStyle(color: Colors.white, fontSize: 14),
+                    cursorColor: LuxuryTheme.purpleLight,
+                    onChanged: (v) => setState(() => _searchQuery = v.toLowerCase()),
+                    decoration: InputDecoration(
+                      hintText: 'Search services…',
+                      hintStyle: TextStyle(color: Colors.white.withAlpha(60), fontSize: 13),
+                      prefixIcon: Icon(Icons.search_rounded, color: LuxuryTheme.purpleLight.withAlpha(180), size: 20),
+                      suffixIcon: _searchQuery.isNotEmpty
+                          ? GestureDetector(
+                              onTap: () { _searchCtrl.clear(); setState(() => _searchQuery = ''); },
+                              child: const Icon(Icons.close_rounded, color: Colors.white38, size: 18))
+                          : null,
+                      border: InputBorder.none,
+                      contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
                     ),
                   ),
-                  const SizedBox(height: 16),
-                  const Text(
-                    "No services available",
-                    style: TextStyle(
-                      color: Colors.white,
-                      fontSize: 16,
-                      fontWeight: FontWeight.w600,
-                    ),
+                ),
+                const SizedBox(height: 10),
+                // Category filter chips
+                SingleChildScrollView(
+                  scrollDirection: Axis.horizontal,
+                  child: Row(
+                    children: categories.map((cat) {
+                      final active = _filterCategory == cat;
+                      return Padding(
+                        padding: const EdgeInsets.only(right: 8),
+                        child: GestureDetector(
+                          onTap: () => setState(() => _filterCategory = cat),
+                          child: AnimatedContainer(
+                            duration: const Duration(milliseconds: 200),
+                            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
+                            decoration: BoxDecoration(
+                              gradient: active ? const LinearGradient(colors: [LuxuryTheme.purple, LuxuryTheme.purpleLight]) : null,
+                              color: active ? null : LuxuryTheme.card,
+                              borderRadius: BorderRadius.circular(20),
+                              border: Border.all(color: active ? LuxuryTheme.purpleLight : LuxuryTheme.purple.withAlpha(60)),
+                              boxShadow: active ? [BoxShadow(color: LuxuryTheme.purple.withAlpha(80), blurRadius: 8)] : null,
+                            ),
+                            child: Text(cat, style: TextStyle(
+                              color: active ? Colors.white : Colors.white54,
+                              fontSize: 12, fontWeight: active ? FontWeight.w700 : FontWeight.w500)),
+                          ),
+                        ),
+                      );
+                    }).toList(),
                   ),
-                  const SizedBox(height: 6),
-                  Text(
-                    "Check back soon",
-                    style: TextStyle(
-                      color: Colors.white.withAlpha(100),
-                      fontSize: 13,
-                    ),
-                  ),
-                ],
-              ),
-            );
-          }
+                ),
+              ]),
+            ),
+            const SizedBox(height: 10),
 
-          return ListView.separated(
-            padding: const EdgeInsets.all(16),
-            itemCount: services.length,
-            separatorBuilder: (_, __) => const SizedBox(height: 12),
-            itemBuilder: (context, index) {
-              final s = services[index];
-
-              return Container(
+            // ── Service list ───────────────────────────────────────────
+            Expanded(
+              child: services.isEmpty
+                  ? Center(child: Column(mainAxisSize: MainAxisSize.min, children: [
+                      Icon(Icons.search_off_rounded, color: LuxuryTheme.purpleLight.withAlpha(80), size: 48),
+                      const SizedBox(height: 12),
+                      Text(_searchQuery.isNotEmpty ? 'No services match "$_searchQuery"' : 'No services available',
+                          style: TextStyle(color: Colors.white.withAlpha(120), fontSize: 14)),
+                    ]))
+                  : ListView.separated(
+                      padding: const EdgeInsets.fromLTRB(16, 4, 16, 24),
+                      itemCount: services.length,
+                      separatorBuilder: (_, __) => const SizedBox(height: 12),
+                      itemBuilder: (context, index) {
+                        final s = services[index];
+                        return Container(
                 decoration: BoxDecoration(
                   color: LuxuryTheme.card,
                   borderRadius: BorderRadius.circular(20),
@@ -872,9 +914,12 @@ class _UserServicesPageState extends State<UserServicesPage> {
                 ),
               );
             },
-          );
-        },
-      ),
-    );
+          ),
+        ),
+        ],
+      );
+    },
+  ),
+);
   }
 }

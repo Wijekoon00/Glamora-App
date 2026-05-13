@@ -7,7 +7,8 @@ import 'services/appointment_repo.dart';
 import 'widgets/luxury_form_widgets.dart';
 
 class UserHistoryPage extends StatelessWidget {
-  const UserHistoryPage({super.key});
+  final void Function(int)? onNavTap;
+  const UserHistoryPage({super.key, this.onNavTap});
 
   @override
   Widget build(BuildContext context) {
@@ -479,6 +480,21 @@ class UserHistoryPage extends StatelessWidget {
                       fontWeight: FontWeight.w800,
                       letterSpacing: 0.5)),
             ),
+            if (onNavTap != null) ...[
+              const SizedBox(height: 6),
+              GestureDetector(
+                onTap: () => onNavTap!(1),
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  decoration: BoxDecoration(
+                    gradient: const LinearGradient(colors: [LuxuryTheme.purple, LuxuryTheme.purpleLight]),
+                    borderRadius: BorderRadius.circular(8),
+                    boxShadow: [BoxShadow(color: LuxuryTheme.purple.withAlpha(80), blurRadius: 6)],
+                  ),
+                  child: const Text('Book Again', style: TextStyle(color: Colors.white, fontSize: 9, fontWeight: FontWeight.w700)),
+                ),
+              ),
+            ],
           ],
         ),
       ]),

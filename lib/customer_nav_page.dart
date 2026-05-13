@@ -1,11 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 
+import 'user_home_page.dart';
 import 'user_services_page.dart';
 import 'user_appointments_page.dart';
-import 'user_profile_page.dart';
-import 'user_ai_page.dart';
 import 'user_history_page.dart';
+import 'user_ai_page.dart';
+import 'user_profile_page.dart';
 import 'widgets/luxury_nav_bar.dart';
 import 'widgets/luxury_form_widgets.dart';
 
@@ -19,23 +20,21 @@ class CustomerNavPage extends StatefulWidget {
 class _CustomerNavPageState extends State<CustomerNavPage> {
   int _selectedIndex = 0;
 
-  static const _pages = [
-    UserServicesPage(),
-    UserAppointmentsPage(),
-    UserHistoryPage(),
-    UserAiPage(),
-    UserProfilePage(),
-  ];
-
   static const _titles = [
+    'Home',
     'Services',
-    'Appointments',
-    'My History',
+    'Bookings',
+    'History',
     'AI Stylist',
     'Profile',
   ];
 
   static const _navItems = [
+    LuxuryNavItem(
+      icon: Icons.home_outlined,
+      activeIcon: Icons.home_rounded,
+      label: 'Home',
+    ),
     LuxuryNavItem(
       icon: Icons.spa_outlined,
       activeIcon: Icons.spa_rounded,
@@ -63,11 +62,22 @@ class _CustomerNavPageState extends State<CustomerNavPage> {
     ),
   ];
 
-  Future<void> _logout() async =>
-      FirebaseAuth.instance.signOut();
+  void _onNavTap(int i) => setState(() => _selectedIndex = i);
+
+  Future<void> _logout() async => FirebaseAuth.instance.signOut();
 
   @override
   Widget build(BuildContext context) {
+    // Build pages here so Home can access _onNavTap
+    final pages = [
+      UserHomePage(onNavTap: _onNavTap),
+      const UserServicesPage(),
+      const UserAppointmentsPage(),
+      UserHistoryPage(onNavTap: _onNavTap),
+      const UserAiPage(),
+      const UserProfilePage(),
+    ];
+
     return Scaffold(
       backgroundColor: LuxuryTheme.black,
       appBar: luxuryAppBar(
@@ -76,12 +86,12 @@ class _CustomerNavPageState extends State<CustomerNavPage> {
       ),
       body: IndexedStack(
         index: _selectedIndex,
-        children: _pages,
+        children: pages,
       ),
       bottomNavigationBar: LuxuryNavBar(
         items: _navItems,
         currentIndex: _selectedIndex,
-        onTap: (i) => setState(() => _selectedIndex = i),
+        onTap: _onNavTap,
       ),
     );
   }
