@@ -1,5 +1,4 @@
-
-import 'dart:typed_data';
+﻿import 'dart:typed_data';
 import 'package:camera/camera.dart';
 import 'package:flutter/material.dart';
 import 'package:google_mlkit_face_detection/google_mlkit_face_detection.dart';
@@ -27,24 +26,29 @@ class ArCameraPage extends StatefulWidget {
 class _ArCameraPageState extends State<ArCameraPage> {
 
   CameraController? _ctrl;
-  bool  _cameraReady  = false;
-  bool  _processing   = false;
-  bool  _isFront      = true;
-  int   _sensorDeg    = 270;
+  bool _cameraReady = false;
+  bool _processing  = false;
+  bool _isFront     = true;
+  int  _sensorDeg   = 90;
 
-  List<Face> _faces     = [];
+  // Raw ML Kit output — stored as-is, transformed later when canvas size known
+  List<Face> _rawFaces  = [];
   Size       _imageSize = Size.zero;
 
-  // Smoothed states — one per detected face, persisted across frames
-  final List<SmoothedFaceState> _smoothedStates = [];
+  // Smoothed states in screen space — updated each frame
+  final List<SmoothedFaceState> _states = [];
+
+  // Last known canvas size from LayoutBuilder
+  Size _canvasSize = Size.zero;
 
   ArOverlayStyle _overlay = ArOverlayStyle.hairstyle;
 
   late final FaceDetector _detector = FaceDetector(
     options: FaceDetectorOptions(
-      enableLandmarks: true,
-      enableContours:  true,
-      performanceMode: FaceDetectorMode.fast,
+      enableLandmarks:     true,
+      enableContours:      true,
+      enableClassification: false,
+      performanceMode:     FaceDetectorMode.fast,
     ),
   );
 
@@ -59,18 +63,17 @@ class _ArCameraPageState extends State<ArCameraPage> {
     final cameras = await availableCameras();
     if (cameras.isEmpty) return;
 
-    // Prefer front camera
     final cam = cameras.firstWhere(
       (c) => c.lensDirection == CameraLensDirection.front,
       orElse: () => cameras.first,
     );
 
-    _isFront    = cam.lensDirection == CameraLensDirection.front;
-    _sensorDeg  = cam.sensorOrientation;
+    _isFront   = cam.lensDirection == CameraLensDirection.front;
+    _sensorDeg = cam.sensorOrientation;
 
     _ctrl = CameraController(
       cam,
-      ResolutionPreset.medium,   // 640×480 — good balance of speed & accuracy
+      ResolutionPreset.medium,
       enableAudio: false,
       imageFormatGroup: ImageFormatGroup.nv21,
     );
@@ -88,62 +91,67 @@ class _ArCameraPageState extends State<ArCameraPage> {
     _processing = true;
 
     try {
-      // Build InputImage with correct rotation metadata
-      final rotation = _mlKitRotation(_sensorDeg);
-
       final inputImage = InputImage.fromBytes(
-        bytes: _mergeNV21(img),
+        bytes: _nv21bytes(img),
         metadata: InputImageMetadata(
-          size:         Size(img.width.toDouble(), img.height.toDouble()),
-          rotation:     rotation,
-          format:       InputImageFormat.nv21,
-          bytesPerRow:  img.planes[0].bytesPerRow,
+          size:        Size(img.width.toDouble(), img.height.toDouble()),
+          rotation:    _rotation(_sensorDeg),
+          format:      InputImageFormat.nv21,
+          bytesPerRow: img.planes[0].bytesPerRow,
         ),
       );
 
       final faces = await _detector.processImage(inputImage);
 
       if (mounted) {
-        // Sync smoothed states list size with detected faces
-        while (_smoothedStates.length < faces.length) {
-          final t = _CoordTransformerHelper(
-            imageSize: Size(img.width.toDouble(), img.height.toDouble()),
-            sensorDegrees: _sensorDeg,
-            isFrontCamera: _isFront,
-          );
-          final box = t.transformRect(faces[_smoothedStates.length].boundingBox);
-          _smoothedStates.add(SmoothedFaceState(
-            left: box.left, top: box.top,
-            right: box.right, bottom: box.bottom,
-            yaw: faces[_smoothedStates.length].headEulerAngleY ?? 0.0,
-            roll: faces[_smoothedStates.length].headEulerAngleZ ?? 0.0,
-          ));
-        }
-        // Trim if fewer faces detected
-        if (_smoothedStates.length > faces.length) {
-          _smoothedStates.removeRange(faces.length, _smoothedStates.length);
-        }
-
         setState(() {
-          _faces     = faces;
+          _rawFaces  = faces;
           _imageSize = Size(img.width.toDouble(), img.height.toDouble());
+          // Update smoothed states if canvas size is known
+          if (_canvasSize != Size.zero) _updateStates();
         });
       }
     } catch (_) {
-      // Skip bad frames silently
+      // skip bad frames
     } finally {
       _processing = false;
     }
   }
 
-  // NV21 = Y plane + interleaved VU plane — concatenate all planes
-  Uint8List _mergeNV21(CameraImage img) {
-    final bytes = <int>[];
-    for (final p in img.planes) bytes.addAll(p.bytes);
-    return Uint8List.fromList(bytes);
+  void _updateStates() {
+    if (_imageSize == Size.zero || _canvasSize == Size.zero) return;
+
+    final t = CoordTransformer(
+      imageSize:    _imageSize,
+      canvasSize:   _canvasSize,
+      sensorDegrees: _sensorDeg,
+      isFrontCamera: _isFront,
+    );
+
+    // Grow list if more faces detected
+    while (_states.length < _rawFaces.length) {
+      final data = t.convert(_rawFaces[_states.length]);
+      _states.add(SmoothedFaceState.fromData(data));
+    }
+    // Shrink list if fewer faces
+    if (_states.length > _rawFaces.length) {
+      _states.removeRange(_rawFaces.length, _states.length);
+    }
+    // Update existing states
+    for (int i = 0; i < _rawFaces.length; i++) {
+      _states[i].update(t.convert(_rawFaces[i]));
+    }
   }
 
-  InputImageRotation _mlKitRotation(int deg) {
+  Uint8List _nv21bytes(CameraImage img) {
+    final out = <int>[];
+    for (final p in img.planes) {
+      out.addAll(p.bytes);
+    }
+    return Uint8List.fromList(out);
+  }
+
+  InputImageRotation _rotation(int deg) {
     switch (deg) {
       case 90:  return InputImageRotation.rotation90deg;
       case 180: return InputImageRotation.rotation180deg;
@@ -152,7 +160,7 @@ class _ArCameraPageState extends State<ArCameraPage> {
     }
   }
 
-  String get _currentStyleName {
+  String get _styleName {
     switch (_overlay) {
       case ArOverlayStyle.hairstyle: return widget.hairstyleName;
       case ArOverlayStyle.beard:     return widget.beardName;
@@ -185,74 +193,78 @@ class _ArCameraPageState extends State<ArCameraPage> {
               style: TextStyle(color: Colors.white,
                   fontWeight: FontWeight.w800, fontSize: 17)),
         ),
+        actions: const [],
       ),
       body: Column(children: [
-        // ── Camera + overlay ─────────────────────────────────────────────
         Expanded(
           child: _cameraReady && _ctrl != null
               ? LayoutBuilder(builder: (ctx, constraints) {
-                  final canvasSize = Size(
-                      constraints.maxWidth, constraints.maxHeight);
+                  // Store canvas size so _updateStates() uses the real value
+                  final cs = Size(constraints.maxWidth, constraints.maxHeight);
+                  if (cs != _canvasSize) {
+                    _canvasSize = cs;
+                    // Re-transform immediately with correct size
+                    WidgetsBinding.instance.addPostFrameCallback((_) {
+                      if (mounted && _rawFaces.isNotEmpty) {
+                        setState(_updateStates);
+                      }
+                    });
+                  }
+
                   return Stack(fit: StackFit.expand, children: [
                     CameraPreview(_ctrl!),
 
-                    // AR overlay — only when face detected
-                    if (_faces.isNotEmpty && _imageSize != Size.zero)
+                    // AR overlay
+                    if (_states.isNotEmpty)
                       CustomPaint(
-                        size: canvasSize,
                         painter: ArFacePainter(
-                          faces:          _faces,
-                          imageSize:      _imageSize,
-                          overlayStyle:   _overlay,
-                          styleName:      _currentStyleName,
-                          hairColor:      widget.hairColor,
-                          sensorDegrees:  _sensorDeg,
-                          isFrontCamera:  _isFront,
-                          smoothedStates: _smoothedStates,
+                          states:       _states,
+                          overlayStyle: _overlay,
+                          styleName:    _styleName,
+                          hairColor:    widget.hairColor,
                         ),
                       ),
 
-                    // Scanning guide when no face
-                    if (_faces.isEmpty)
-                      _buildScanGuide(),
+                    // No face guide
+                    if (_rawFaces.isEmpty)
+                      _scanGuide(),
 
-                    // Face count badge
-                    if (_faces.isNotEmpty)
-                      Positioned(
-                        top: 12, right: 12,
-                        child: _badge(
-                            '${_faces.length} face detected',
-                            Colors.green),
+                    // Status badge
+                    Positioned(
+                      top: 12, left: 12,
+                      child: _badge(
+                        _rawFaces.isEmpty
+                            ? 'Scanning...'
+                            : '${_rawFaces.length} face${_rawFaces.length > 1 ? "s" : ""} detected',
+                        _rawFaces.isEmpty ? Colors.orange : Colors.green,
                       ),
+                    ),
                   ]);
                 })
               : Center(
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Container(
-                        width: 56, height: 56,
-                        decoration: BoxDecoration(
-                          shape: BoxShape.circle,
-                          color: LuxuryTheme.card,
-                          border: Border.all(
-                              color: LuxuryTheme.purpleLight.withAlpha(120)),
-                        ),
-                        child: const Padding(
-                          padding: EdgeInsets.all(14),
-                          child: CircularProgressIndicator(
-                              color: LuxuryTheme.purpleLight, strokeWidth: 2),
-                        ),
+                  child: Column(mainAxisSize: MainAxisSize.min, children: [
+                    Container(
+                      width: 56, height: 56,
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        color: LuxuryTheme.card,
+                        border: Border.all(
+                            color: LuxuryTheme.purpleLight.withAlpha(120)),
                       ),
-                      const SizedBox(height: 12),
-                      const Text('Starting camera...',
-                          style: TextStyle(color: Colors.white54)),
-                    ],
-                  ),
+                      child: const Padding(
+                        padding: EdgeInsets.all(14),
+                        child: CircularProgressIndicator(
+                            color: LuxuryTheme.purpleLight, strokeWidth: 2),
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    const Text('Starting camera...',
+                        style: TextStyle(color: Colors.white54)),
+                  ]),
                 ),
         ),
 
-        // ── Controls ─────────────────────────────────────────────────────
+        // Controls
         Container(
           decoration: BoxDecoration(
             color: LuxuryTheme.card,
@@ -263,19 +275,14 @@ class _ArCameraPageState extends State<ArCameraPage> {
           ),
           padding: const EdgeInsets.fromLTRB(16, 14, 16, 20),
           child: Column(children: [
-            // Style name
-            Text(
-              _currentStyleName,
-              textAlign: TextAlign.center,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: TextStyle(
-                  color: Colors.white.withAlpha(160),
-                  fontSize: 12,
-                  fontWeight: FontWeight.w600),
-            ),
+            Text(_styleName,
+                textAlign: TextAlign.center,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                    color: Colors.white.withAlpha(160),
+                    fontSize: 12, fontWeight: FontWeight.w600)),
             const SizedBox(height: 12),
-            // Overlay tabs
             Row(children: [
               _tab('💇 Hair',  ArOverlayStyle.hairstyle),
               const SizedBox(width: 8),
@@ -289,39 +296,28 @@ class _ArCameraPageState extends State<ArCameraPage> {
     );
   }
 
-  // ── Scan guide overlay ──────────────────────────────────────────────────────
-  Widget _buildScanGuide() {
-    return Center(
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          // Animated face outline guide
-          Container(
-            width: 200, height: 260,
-            decoration: BoxDecoration(
-              border: Border.all(
-                  color: LuxuryTheme.purpleLight.withAlpha(120), width: 2),
-              borderRadius: BorderRadius.circular(120),
-            ),
-          ),
-          const SizedBox(height: 20),
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-            decoration: BoxDecoration(
-              color: Colors.black54,
-              borderRadius: BorderRadius.circular(20),
-            ),
-            child: const Text(
-              'Position your face in the oval',
-              style: TextStyle(color: Colors.white70, fontSize: 13),
-            ),
-          ),
-        ],
+  Widget _scanGuide() => Center(
+    child: Column(mainAxisSize: MainAxisSize.min, children: [
+      Container(
+        width: 200, height: 260,
+        decoration: BoxDecoration(
+          border: Border.all(
+              color: LuxuryTheme.purpleLight.withAlpha(120), width: 2),
+          borderRadius: BorderRadius.circular(120),
+        ),
       ),
-    );
-  }
+      const SizedBox(height: 20),
+      Container(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+        decoration: BoxDecoration(
+            color: Colors.black54,
+            borderRadius: BorderRadius.circular(20)),
+        child: const Text('Position your face in the oval',
+            style: TextStyle(color: Colors.white70, fontSize: 13)),
+      ),
+    ]),
+  );
 
-  // ── Tab button ──────────────────────────────────────────────────────────────
   Widget _tab(String label, ArOverlayStyle style) {
     final active = _overlay == style;
     return Expanded(
@@ -331,29 +327,23 @@ class _ArCameraPageState extends State<ArCameraPage> {
           duration: const Duration(milliseconds: 200),
           padding: const EdgeInsets.symmetric(vertical: 11),
           decoration: BoxDecoration(
-            gradient: active
-                ? const LinearGradient(
-                    colors: [LuxuryTheme.purple, LuxuryTheme.purpleLight])
-                : null,
+            gradient: active ? const LinearGradient(
+                colors: [LuxuryTheme.purple, LuxuryTheme.purpleLight]) : null,
             color: active ? null : const Color(0xFF0A0A14),
             borderRadius: BorderRadius.circular(12),
             border: Border.all(
-              color: active
-                  ? LuxuryTheme.purpleLight
+              color: active ? LuxuryTheme.purpleLight
                   : LuxuryTheme.purple.withAlpha(60),
             ),
-            boxShadow: active
-                ? [BoxShadow(
-                    color: LuxuryTheme.purple.withAlpha(80),
-                    blurRadius: 10, offset: const Offset(0, 4))]
-                : null,
+            boxShadow: active ? [BoxShadow(
+                color: LuxuryTheme.purple.withAlpha(80),
+                blurRadius: 10, offset: const Offset(0, 4))] : null,
           ),
           child: Text(label,
               textAlign: TextAlign.center,
               style: TextStyle(
                   color: active ? Colors.white : Colors.white38,
-                  fontWeight: FontWeight.w700,
-                  fontSize: 12)),
+                  fontWeight: FontWeight.w700, fontSize: 12)),
         ),
       ),
     );
@@ -370,58 +360,8 @@ class _ArCameraPageState extends State<ArCameraPage> {
       Container(width: 6, height: 6,
           decoration: BoxDecoration(color: color, shape: BoxShape.circle)),
       const SizedBox(width: 6),
-      Text(text, style: TextStyle(color: color, fontSize: 11,
-          fontWeight: FontWeight.w600)),
+      Text(text, style: TextStyle(
+          color: color, fontSize: 11, fontWeight: FontWeight.w600)),
     ]),
   );
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-// Lightweight coord helper used only for initialising SmoothedFaceState
-// (the full transformer lives in ar_face_painter.dart)
-// ─────────────────────────────────────────────────────────────────────────────
-class _CoordTransformerHelper {
-  final Size imageSize;
-  final int sensorDegrees;
-  final bool isFrontCamera;
-
-  late final double _scaleX, _scaleY, _offsetX, _offsetY;
-  late final Size _rotated;
-
-  _CoordTransformerHelper({
-    required this.imageSize,
-    required this.sensorDegrees,
-    required this.isFrontCamera,
-  }) {
-    final bool rot90 = sensorDegrees == 90 || sensorDegrees == 270;
-    _rotated = rot90
-        ? Size(imageSize.height, imageSize.width)
-        : imageSize;
-    // Use a fixed canvas estimate (doesn't matter for init — will be
-    // corrected by SmoothedFaceState.update() on the first real frame)
-    const double kW = 400, kH = 800;
-    final double imgA = _rotated.width / _rotated.height;
-    final double canA = kW / kH;
-    double rW, rH;
-    if (imgA > canA) { rH = kH; rW = rH * imgA; }
-    else             { rW = kW; rH = rW / imgA; }
-    _scaleX  = rW / _rotated.width;
-    _scaleY  = rH / _rotated.height;
-    _offsetX = (kW - rW) / 2;
-    _offsetY = (kH - rH) / 2;
-  }
-
-  Offset _pt(double rawX, double rawY) {
-    double x = rawX, y = rawY;
-    switch (sensorDegrees) {
-      case 90:  final t = x; x = y; y = imageSize.width  - t; break;
-      case 270: final t = y; y = x; x = imageSize.height - t; break;
-      case 180: x = imageSize.width - x; y = imageSize.height - y; break;
-    }
-    if (isFrontCamera) x = _rotated.width - x;
-    return Offset(x * _scaleX + _offsetX, y * _scaleY + _offsetY);
-  }
-
-  Rect transformRect(Rect r) =>
-      Rect.fromPoints(_pt(r.left, r.top), _pt(r.right, r.bottom));
 }
