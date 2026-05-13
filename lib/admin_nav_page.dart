@@ -1,10 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 
-import 'test_page.dart';
+import 'admin_main_dashboard.dart';
 import 'pages/admin_services_page.dart';
 import 'pages/admin_appointments_page.dart';
-import 'admin_dashboard_page.dart';
+import 'manage_users_page.dart';
 import 'admin_profile_page.dart';
 import 'widgets/luxury_nav_bar.dart';
 import 'widgets/luxury_form_widgets.dart';
@@ -18,14 +18,6 @@ class AdminNavPage extends StatefulWidget {
 
 class _AdminNavPageState extends State<AdminNavPage> {
   int _selectedIndex = 0;
-
-  static const _pages = [
-    TestPage(),
-    AdminServicesPage(),
-    AdminAppointmentsPage(),
-    AdminDashboardPage(),
-    AdminProfilePage(),
-  ];
 
   static const _titles = [
     'Dashboard',
@@ -66,8 +58,20 @@ class _AdminNavPageState extends State<AdminNavPage> {
   Future<void> _logout() async =>
       FirebaseAuth.instance.signOut();
 
+  void _onNavTap(int index) =>
+      setState(() => _selectedIndex = index);
+
   @override
   Widget build(BuildContext context) {
+    // Pages built here so dashboard can access _onNavTap
+    final pages = [
+      AdminMainDashboard(onNavTap: _onNavTap),
+      const AdminServicesPage(),
+      const AdminAppointmentsPage(),
+      const ManageUsersPage(),
+      const AdminProfilePage(),
+    ];
+
     return Scaffold(
       backgroundColor: LuxuryTheme.black,
       appBar: luxuryAppBar(
@@ -76,12 +80,12 @@ class _AdminNavPageState extends State<AdminNavPage> {
       ),
       body: IndexedStack(
         index: _selectedIndex,
-        children: _pages,
+        children: pages,
       ),
       bottomNavigationBar: LuxuryNavBar(
         items: _navItems,
         currentIndex: _selectedIndex,
-        onTap: (i) => setState(() => _selectedIndex = i),
+        onTap: _onNavTap,
       ),
     );
   }
